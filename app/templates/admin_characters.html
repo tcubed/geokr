@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Manage Characters</h1>
+
+  <form id="characterForm">
+    <input type="text" id="characterName" placeholder="Character Name" required /><br/>
+    
+    <label for="gameSelect">Select Game:</label><br/>
+    <select id="gameSelect" required>
+      <option value="">-- Select Game --</option>
+    </select><br/><br/>
+
+    <label for="locationSelect">Select Location:</label><br/>
+    <select id="locationSelect" required>
+      <option value="">-- Select Location --</option>
+    </select><br/><br/>
+
+    <textarea id="characterDescription" placeholder="Description"></textarea><br/><br/>
+
+    <button type="submit">Add Character</button>
+  </form>
+
+  <h2>Existing Characters</h2>
+  <ul id="charactersList"></ul>
+
+  <script>
+    let games = [];
+    let editingCharacterId = null;
+
+    async function fetchGames() {
+      const res = await fetch('/admin/api/games');
+      games = await res.json();
+      const gameSelect = document.getElementById('gameSelect');
+      gameSelect.innerHTML = '<option value="">-- Select Game --</option>';
+      games.forEach(g => {
+        const option = document.createElement('option');
+        option.value = g.id;
+        option.textContent = g.name;
+        gameSelect.appendChild(option);
+      });
+    }
+
+    async function fetchLocations(gameId) {
+      if (!gameId) {
+        document.getElementById('locationSelect').innerHTML = '<option value="">-- Select Location --</option>';
+        return;
+      }
+      const res = await fetch(`/admin/api/locations?game_id=${gameId}`);
+      const locations = await res.json();
+      const locationSelect = document.getElementById('locationSelect');
+      locationSelect.innerHTML = '<option value="">-- Select Location --</option>';
+      locations.forEach(loc => {
+        const option = document.createElement('option');
+        option.value = loc.id;
+        option.textContent = loc.name;
+        locationSelect.appendChild(option);
+      });
+    }
+
+    async function fetchCharacters() {
+        const res = await fetch('/admin/api/characters');
+        const characters = await res.json();
+        const list = document.getElementById('charactersList');
+        list.innerHTML = '';
+        characters.forEach(c => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <strong>${c.name}</strong> (Game: ${c.game_name}, Location: ${c.location_name})<br/>
+            ${c.description || 'No description'}<br/>
+            <button onclick="editCharacter(${c.id})">Edit</button>
+            <button onclick="deleteCharacter(${c.id})">Delete</button>
+        `;
+        list.appendChild(li);
+        });
+    }
+
+    document.getElementById('gameSelect').addEventListener('change', e => {
+      fetchLocations(e.target.value);
+    });
+
+    document.getElementById('characterForm').onsubmit = async e => {
+        e.preventDefault();
+        const name = document.getElementById('characterName').value;
+        const location_id = document.getElementById('locationSelect').value;
+        const description = document.getElementById('characterDescription').value;
+
+        if (!location_id) {
+        alert('Please select a location.');
+        return;
+        }
+
+        let url = '/admin/api/characters';
+        let method = 'POST';
+        if (editingCharacterId) {
+        url += `/${editingCharacterId}`;
+        method = 'PUT';
+        }
+
+        const response = await fetch(url, {
+        method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, location_id, description})
+        });
+
+        if (response.ok) {
+        document.getElementById('characterForm').reset();
+        editingCharacterId = null;
+        document.querySelector('button[type="submit"]').textContent = 'Add Character';
+        fetchCharacters();
+        } else {
+        alert('Failed to save character');
+        }
+    };
+
+    function editCharacter(id) {
+        // Find character data from the current list by ID
+        fetch('/admin/api/characters')
+        .then(res => res.json())
+        .then(characters => {
+            const character = characters.find(c => c.id === id);
+            if (!character) return alert('Character not found');
+
+            editingCharacterId = id;
+            document.getElementById('characterName').value = character.name;
+            document.getElementById('characterDescription').value = character.description || '';
+            // Set game and location selects
+            const gameSelect = document.getElementById('gameSelect');
+            gameSelect.value = games.find(g => g.name === character.game_name)?.id || '';
+            fetchLocations(gameSelect.value).then(() => {
+            document.getElementById('locationSelect').value = character.location_id || '';
+            });
+
+            document.querySelector('button[type="submit"]').textContent = 'Save Changes';
+        });
+    }
+
+    async function deleteCharacter(id) {
+        if (!confirm('Delete this character?')) return;
+        const response = await fetch(`/admin/api/characters/${id}`, {
+        method: 'DELETE'
+        });
+        if (response.ok) {
+        fetchCharacters();
+        } else {
+        alert('Failed to delete character');
+        }
+    }
+
+    fetchGames().then(() => {
+      fetchCharacters();
+    });
+  </script>
+
+{% endblock %}

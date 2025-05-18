@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Manage Games</h1>
+  <form id="gameForm">
+    <input type="text" id="gameName" placeholder="Game Name" required />
+    <br/>
+    <textarea id="gameDesc" placeholder="Description"></textarea><br/>
+    <button type="submit">Add Game</button>
+  </form>
+  <ul id="gamesList"></ul>
+
+  <script>
+    async function fetchGames() {
+      const res = await fetch('/admin/api/games');
+      const games = await res.json();
+      const list = document.getElementById('gamesList');
+      list.innerHTML = '';
+      games.forEach(g => {
+        const li = document.createElement('li');
+        li.textContent = `${g.name} - ${g.description}`;
+        list.appendChild(li);
+      });
+    }
+
+    document.getElementById('gameForm').onsubmit = async e => {
+      e.preventDefault();
+      const name = document.getElementById('gameName').value;
+      const description = document.getElementById('gameDesc').value;
+      await fetch('/admin/api/games', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, description})
+      });
+      document.getElementById('gameForm').reset();
+      fetchGames();
+    };
+
+    fetchGames();
+  </script>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Welcome to the Geo Clue Hunt!</h1>
+
+  <select id="gameSelect" required>
+    <option value="">Select Game</option>
+  </select>
+
+  <button onclick="getClues()">Check for Clues Near Me</button>
+  <ul id="clue-list"></ul>
+
+  <script>
+    async function loadGames() {
+      const res = await fetch('/admin/api/games');
+      const games = await res.json();
+      const select = document.getElementById('gameSelect');
+      games.forEach(g => {
+        const option = document.createElement('option');
+        option.value = g.id;
+        option.textContent = g.name;
+        select.appendChild(option);
+      });
+    }
+  
+    async function getClues() {
+      const gameId = document.getElementById('gameSelect').value;
+      if (!gameId) {
+        alert('Please select a game first');
+        return;
+      }
+  
+      if (!navigator.geolocation) {
+        alert("Geolocation not supported.");
+        return;
+      }
+  
+      navigator.geolocation.getCurrentPosition(async position => {
+
+        console.log(position.coords.latitude, 
+          position.coords.longitude,
+          "Accuracy:", position.coords.accuracy,"meters")
+
+        const response = await fetch('/api/locations', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            game_id: parseInt(gameId)
+          })
+        });
+        const clues = await response.json();
+        const list = document.getElementById('clue-list');
+        list.innerHTML = '';
+        clues.forEach(clue => {
+          const item = document.createElement('li');
+          item.textContent = `${clue.name}: ${clue.clue}`;
+          list.appendChild(item);
+        });
+      });
+    }
+  
+    loadGames();
+  </script>
+{% endblock %}
