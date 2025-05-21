@@ -37,11 +37,13 @@ def get_nearby_locations():
         dist = utils.haversine(lat, lon, loc.latitude, loc.longitude)
         print(f"Checking location: {loc.name} at ({loc.latitude}, {loc.longitude}), distance: {dist} meters")
         
-        if dist < 30:  # meters
+        if dist < 1000:  # meters
             results.append({
                 'id': loc.id,
                 'name': loc.name,
-                'clue': loc.clue_text
+                'clue': loc.clue_text,
+                'latitude': loc.latitude,
+                'longitude': loc.longitude,
             })
     return jsonify(results)
 
