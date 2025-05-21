@@ -79,7 +79,7 @@ def admin_characters_page():
 
 
 @admin_bp.route('/api/games', methods=['GET', 'POST'])
-@requires_auth
+#@requires_auth
 def admin_api_games():
     from app.models import Game, db
     if request.method == 'POST':
@@ -163,7 +163,7 @@ def admin_api_characters():
         return jsonify(result)
 
 @admin_bp.route('/api/locations')
-@requires_auth
+#@requires_auth
 def admin_api_locations():
     from app.models import Location
     game_id = request.args.get('game_id')
