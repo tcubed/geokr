@@ -1,5 +1,6 @@
 
 from . import db
+from flask_login import UserMixin
 from datetime import datetime
 
 team_game = db.Table('team_game',
@@ -42,3 +43,9 @@ class Team(db.Model):
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     games = db.relationship('Game', secondary=team_game, back_populates='teams')
     
+class User(db.Model,UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    display_name = db.Column(db.String(80))
+    email = db.Column(db.String(120), unique=True)
+    picture_url = db.Column(db.String(200))
+    password_hash = db.Column(db.String(128))  # Add password hash for authentication

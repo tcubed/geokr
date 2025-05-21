@@ -14,11 +14,34 @@
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">Geokr</a>
+      <a class="navbar-brand" href="/">Geokr{% if game and game.name %} - {{ game.name }}{% endif %}</a>
       <div class="d-flex ms-auto">
-        <a href="/account" class="nav-link text-white">
-          <i class="fa-solid fa-user fa-lg"></i>
-        </a>
+        <div class="dropdown">
+          <a class="nav-link text-white dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fa-solid fa-user fa-lg"></i>
+            {% if current_user.is_authenticated %}
+              <span class="ms-2">{{ current_user.display_name or current_user.email }}</span>
+            {% endif %}
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+            {% if current_user.is_authenticated %}
+              <li>
+                <a class="dropdown-item" href="/account">
+                  {% if current_user.picture_url %}
+                    <img src="{{ current_user.picture_url }}" alt="Profile" style="width:24px;height:24px;border-radius:50%;margin-right:8px;">
+                  {% endif %}
+                  Account
+                </a>
+              </li>
+              <li><a class="dropdown-item" href="/logout">Logout</a></li>
+            {% else %}
+              <li><a class="dropdown-item" href="/login">Login</a></li>
+              <li><a class="dropdown-item" href="/register">Register</a></li>
+            {% endif %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/faq">FAQ</a></li>
+          </ul>
+        </div>
       </div>
     </div>
   </nav>

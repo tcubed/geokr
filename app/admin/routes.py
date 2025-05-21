@@ -23,13 +23,13 @@ def requires_auth(f):
     return decorated
 
 
-@admin_bp.route('/admin/load_sample_data')
+@admin_bp.route('/load_sample_data')
 @requires_auth
 def load_sample_data():
     from app.models import db, Location, Character
 
     # Create a sample game
-    game = Game(name="Sample Game", description="A test game.")
+    game = Game(name="Fox Crossing", description="A test game.")
     db.session.add(game)
     db.session.flush()  # Assigns an ID to game
 
@@ -46,7 +46,7 @@ def load_sample_data():
     db.session.commit()
     return "Sample data loaded."
 
-@admin_bp.route('/admin/clear')
+@admin_bp.route('/clear')
 @requires_auth
 def clear_data():
     from app.models import db, Location, Character, Team, Game, team_game

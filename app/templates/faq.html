@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}FAQ - GeoKR{% endblock %}
+
+{% block content %}
+  <h1>Frequently Asked Questions</h1>
+  <div class="accordion" id="faqAccordion">
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingLocation">
+        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLocation" aria-expanded="true" aria-controls="collapseLocation">
+          How do I turn on location on my phone?
+        </button>
+      </h2>
+      <div id="collapseLocation" class="accordion-collapse collapse show" aria-labelledby="headingLocation" data-bs-parent="#faqAccordion">
+        <div class="accordion-body">
+          <strong>To enable location services for GeoKR:</strong>
+          <ul>
+            <li><b>iPhone (Safari):</b>
+              <ol>
+                <li>Go to <b>Settings &gt; Privacy &amp; Security &gt; Location Services</b> and make sure Location Services are <b>On</b>.</li>
+                <li>Scroll down to <b>Safari Websites</b> and set to <b>Ask</b> or <b>While Using the App</b>.</li>
+                <li>If you previously denied location, go to <b>Settings &gt; Safari &gt; Advanced &gt; Website Data</b>, find this site, and remove its data.</li>
+                <li>Reload the GeoKR page and allow location access when prompted.</li>
+              </ol>
+            </li>
+            <li><b>Android (Chrome):</b>
+              <ol>
+                <li>Go to <b>Settings &gt; Location</b> and ensure Location is <b>On</b>.</li>
+                <li>In Chrome, tap the lock icon or info icon in the address bar, then tap <b>Permissions</b> and allow Location.</li>
+                <li>If you previously denied location, clear site settings in Chrome and reload the page.</li>
+                <li>Allow location access when prompted.</li>
+              </ol>
+            </li>
+            <li><b>General Tips:</b>
+              <ul>
+                <li>Make sure you are accessing GeoKR over <b>HTTPS</b> (not HTTP).</li>
+                <li>Some browsers require a user action (like pressing a button) to request your location.</li>
+                <li>If you still have trouble, try restarting your phone after changing settings.</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <!-- Add more FAQ items here as needed -->
+  </div>
+{% endblock %}

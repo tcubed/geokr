@@ -1,4 +1,9 @@
 {% extends "base.html" %}
+
+{% block title %}
+Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
+{% endblock %}
+
 {% block content %}
   <h1>Welcome to the Geo Clue Hunt!</h1>
 
@@ -40,7 +45,7 @@
         option.textContent = g.name;
         select.appendChild(option);
       });
-      alert("Games loaded: " + games.length); 
+      //alert("Games loaded: " + games.length); 
     }
   
     async function getClues() {

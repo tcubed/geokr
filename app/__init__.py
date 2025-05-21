@@ -1,17 +1,31 @@
+from datetime import timedelta
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, current_user
+
 
 db = SQLAlchemy()
+
+login_manager = LoginManager()
+login_manager.login_view = 'main.login'  # or your login route
 
 def create_app():
     app = Flask(__name__)
     print(f"Template folder: {app.template_folder}")
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=365)
     app.secret_key = 'your-secret-key'  # Needed for Flask-Admin
 
     db.init_app(app)
 
+    
+    login_manager.init_app(app)
+
+    @app.context_processor
+    def inject_user():
+        return dict(current_user=current_user)
+    
     with app.app_context():
         #from . import routes
         #from . import models
@@ -23,5 +37,13 @@ def create_app():
 
         db.create_all()
 
+    
+    
     return app
 
+
+@login_manager.user_loader
+def load_user(user_id):
+    from app.models import User
+
+    return User.query.get(int(user_id))
