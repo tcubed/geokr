@@ -79,7 +79,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
         const now = new Date();
         const diff = Math.round((now - posTime) / 1000);
 
-        alert(`Position timestamp: ${posTime}, Seconds old: ${diff}s`);
+        alert(`Position timestamp: ${posTime}, Seconds old: ${diff}s (${lat}, ${lon}), accuracy: ${accuracy}m`);
         //console.log(`Seconds old: ${diff}s`);
 
 
