@@ -56,6 +56,12 @@
       }
 
       
+      console.log("Requesting geolocation, pre-lim...");
+      navigator.geolocation.getCurrentPosition(
+          pos => alert("Lat: " + pos.coords.latitude + ", Lon: " + pos.coords.longitude),
+          err => alert("Geo error: " + err.message)
+        );
+
       console.log("Requesting geolocation...");
       navigator.geolocation.getCurrentPosition(async position => {
         alert("GOT LOCATION");
