@@ -55,16 +55,16 @@
         return;
       }
 
-      
+      /*
       console.log("Requesting geolocation, pre-lim...");
       navigator.geolocation.getCurrentPosition(
           pos => alert("Lat: " + pos.coords.latitude + ", Lon: " + pos.coords.longitude),
           err => alert("Geo error: " + err.message)
         );
-
+      */
       console.log("Requesting geolocation...");
       navigator.geolocation.getCurrentPosition(async position => {
-        alert("GOT LOCATION");
+        //alert("GOT LOCATION");
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
         const accuracy = position.coords.accuracy;
@@ -73,7 +73,7 @@
         showMap(lat, lon);
 
         console.log(lat, lon,"Accuracy:", accuracy,"meters")
-        alert("Latitude: " + lat + "\nLongitude: " + lon + "\nAccuracy: " + accuracy + " meters");
+        //alert("Latitude: " + lat + "\nLongitude: " + lon + "\nAccuracy: " + accuracy + " meters");
 
 
         const response = await fetch('/api/locations', {
@@ -86,6 +86,8 @@
           })
         });
         const clues = await response.json();
+
+        /*
         const list = document.getElementById('clue-list');
         list.innerHTML = '';
         clues.forEach(clue => {
@@ -94,6 +96,7 @@
           list.appendChild(item);
         });
         console.log(clues, "Clue List");
+        */
 
         // Remove old clue markers
         clueMarkers.forEach(m => map.removeLayer(m));
