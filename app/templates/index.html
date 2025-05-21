@@ -23,6 +23,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   <script>
     let map, marker;
     let clueMarkers = [];
+    let currentZoom = 18; // default zoom
 
     const distanceThreshold = 30; // meters
 
@@ -73,6 +74,14 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
         const accuracy = position.coords.accuracy;
+
+        const posTime = new Date(position.timestamp);
+        const now = new Date();
+        const diff = Math.round((now - posTime) / 1000);
+
+        alert(`Position timestamp: ${posTime}, Seconds old: ${diff}s`);
+        //console.log(`Seconds old: ${diff}s`);
+
 
         // Show map and marker
         showMap(lat, lon);
@@ -130,6 +139,11 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
       }, err => {
         alert("Geolocation error: " + err.message);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 5000
       });
     }
     
@@ -148,15 +162,19 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
     function showMap(lat, lon) {
       if (!map) {
-        map = L.map('map').setView([lat, lon], 18);
+        map = L.map('map').setView([lat, lon], currentZoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 19,
           attribution: '© OpenStreetMap'
         }).addTo(map);
         marker = L.marker([lat, lon]).addTo(map)
           .bindPopup('You are here').openPopup();
+        // Listen for zoom changes
+        map.on('zoomend', function() {
+          currentZoom = map.getZoom();
+        });
       } else {
-        map.setView([lat, lon], 16);
+        map.setView([lat, lon], currentZoom);
         marker.setLatLng([lat, lon]);
       }
     }
