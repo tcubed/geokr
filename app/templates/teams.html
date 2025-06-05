@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Teams - Geokr{% endblock %}
+{% block content %}
+  <h1>Teams</h1>
+
+  <h2>Browse Teams</h2>
+  <ul class="list-group mb-4">
+    {% for team in teams %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        {{ team.name }}
+        <span>
+          <a href="{{ url_for('main.join_team', team_id=team.id) }}" class="btn btn-sm btn-success">Join</a>
+        </span>
+      </li>
+    {% else %}
+      <li class="list-group-item">No teams yet.</li>
+    {% endfor %}
+  </ul>
+
+  <h2>Create a Team</h2>
+  <form method="POST">
+    <div class="mb-3">
+      <label for="team_name" class="form-label">Team Name</label>
+      <input type="text" class="form-control" id="team_name" name="team_name" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Create Team</button>
+  </form>
+{% endblock %}

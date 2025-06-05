@@ -16,6 +16,18 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
   <div id="map" style="height: 300px; width: 100%; margin-top: 20px;"></div>
 
+
+  <div id="progress"></div>
+  <script>
+  async function updateProgress() {
+    const teamId = localStorage.getItem('team_id');
+    if (!teamId) return;
+    const res = await fetch(`/api/team/progress/${teamId}`);
+    const data = await res.json();
+    document.getElementById('progress').textContent = `Clues found: ${data.clues_found.length}`;
+  }
+  </script>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 

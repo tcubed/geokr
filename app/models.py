@@ -15,7 +15,8 @@ class Game(db.Model):
     description = db.Column(db.Text)
     locations = db.relationship('Location', backref='game', lazy=True)
     characters = db.relationship('Character', backref='game', lazy=True)
-    teams = db.relationship('Team', secondary=team_game, back_populates='games')  # <-- FIXED
+    
+    teams = db.relationship('Team', back_populates='game') # <-- FIXED
 
 
 class Location(db.Model):
@@ -39,9 +40,14 @@ class Character(db.Model):
 class Team(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
+    game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
     clues_found = db.Column(db.PickleType, default=list)
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     games = db.relationship('Game', secondary=team_game, back_populates='teams')
+    discoverable = db.Column(db.Boolean, default=True)  # Whether other teams can find/join
+
+    memberships = db.relationship('TeamMembership', back_populates='team')
+    game = db.relationship('Game', back_populates='teams')
     
 class User(db.Model,UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -49,3 +55,14 @@ class User(db.Model,UserMixin):
     email = db.Column(db.String(120), unique=True)
     picture_url = db.Column(db.String(200))
     password_hash = db.Column(db.String(128))  # Add password hash for authentication
+
+    team_memberships = db.relationship('TeamMembership', back_populates='user')
+
+class TeamMembership(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=False)
+    __table_args__ = (db.UniqueConstraint('user_id', 'team_id', name='_user_team_uc'),)
+
+    user = db.relationship('User', back_populates='team_memberships')
+    team = db.relationship('Team', back_populates='memberships')
