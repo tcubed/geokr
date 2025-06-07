@@ -20,6 +20,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     height: calc(100dvh - 65px);
     /*min-height: 90vh;
     height: 90vh;*/
+    padding-bottom: env(safe-area-inset-bottom);
   }
   #top-content {
     flex: 0 0 auto;
@@ -38,6 +39,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   #bottom-buttons {
     flex: 0 0 auto;
     padding: 10px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 24px) + 10px); /* extra space for comfort */
     background: #fff;
     border-top: 1px solid #eee;
     text-align: center;
