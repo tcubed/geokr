@@ -2,8 +2,19 @@ from datetime import timedelta
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
+from flask_migrate import Migrate
 
+import logging
+import sys
 
+# logging.basicConfig(
+#     level=logging.INFO,  # or DEBUG for more detail
+#     format='%(asctime)s %(levelname)s %(message)s',
+#     handlers=[logging.StreamHandler(sys.stdout)]
+# )
+# logger = logging.getLogger(__name__)
+
+migrate = Migrate()
 db = SQLAlchemy()
 
 login_manager = LoginManager()
@@ -18,7 +29,7 @@ def create_app():
     app.secret_key = 'your-secret-key'  # Needed for Flask-Admin
 
     db.init_app(app)
-
+    migrate.init_app(app, db)
     
     login_manager.init_app(app)
 

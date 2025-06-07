@@ -2,3 +2,5 @@ flask
 flask_sqlalchemy
 flask_admin
 flask-login
+flask-migrate
+wtforms-sqlalchemy

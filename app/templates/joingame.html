@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 class="mb-4">Join a Game</h2>
+  <form method="post" class="mx-auto" style="max-width: 400px;">
+    <div class="mb-3">
+      <label for="game_id" class="form-label">Select Game</label>
+      <select name="game_id" id="game_id" class="form-select" required>
+        {% for game in games %}
+          <option value="{{ game.id }}">{{ game.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="team_id" class="form-label">Join Existing Team</label>
+      <select name="team_id" id="team_id" class="form-select">
+        {% for team in teams_by_game[games[0].id] %}
+          <option value="{{ team.id }}">{{ team.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="new_team_name" class="form-label">Or Create New Team</label>
+      <input type="text" name="new_team_name" id="new_team_name" class="form-control" placeholder="Enter new team name">
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Join/Create</button>
+  </form>
+
+  <script>
+    // Teams by game as a JS object
+    const teamsByGame = {{ teams_by_game | tojson }};
+    const teamSelect = document.getElementById('team_id');
+    const gameSelect = document.getElementById('game_id');
+
+    gameSelect.addEventListener('change', function() {
+      const gameId = this.value;
+      const teams = teamsByGame[gameId] || [];
+      teamSelect.innerHTML = '';
+      teams.forEach(team => {
+        const option = document.createElement('option');
+        option.value = team.id;
+        option.textContent = team.name;
+        teamSelect.appendChild(option);
+      });
+    });
+  </script>
+{% endblock %}

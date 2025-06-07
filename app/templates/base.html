@@ -14,15 +14,29 @@
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
-      <a class="navbar-brand" href="/">Geokr{% if game and game.name %} - {{ game.name }}{% endif %}</a>
+      <a class="navbar-brand" href="/">Geo Clue Hunt
+        {% if game and game.name %}
+        <div class="small" style="font-size: 0.6em; line-height:1; margin-top:1px;">
+          Game: {{ game.name }}
+        </div>
+        {% endif %}
+      </a>
       <div class="d-flex ms-auto">
         <div class="dropdown">
           <a class="nav-link text-white dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="fa-solid fa-user fa-lg"></i>
             {% if current_user.is_authenticated %}
               <span class="ms-2">{{ current_user.display_name or current_user.email }}</span>
+              
             {% endif %}
           </a>
+          {% if current_user.is_authenticated %}
+           {% if team and team.name %}
+              <div class="small text-white" style="font-size: 0.8em; line-height:1; margin-top:1px;">
+                Team: {{team.name}}
+              </div>
+              {% endif %}
+          {% endif %}
           <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
             {% if current_user.is_authenticated %}
               <li>
@@ -33,6 +47,16 @@
                   Account
                 </a>
               </li>
+              <li>
+                <a class="dropdown-item" href="{{ url_for('main.join_game') }}">
+                  <i class="fa-solid fa-people-group"></i> Join/Change Team
+                </a>
+              </li>
+              <li>
+              <a class="dropdown-item" href="{{ url_for('main.options') }}">
+                <i class="fa-solid fa-sliders"></i> Options
+              </a>
+            </li>
               <li><a class="dropdown-item" href="/logout">Logout</a></li>
             {% else %}
               <li><a class="dropdown-item" href="/login">Login</a></li>
@@ -45,7 +69,10 @@
       </div>
     </div>
   </nav>
+  <!--
   <div class="container mt-4">
+    -->
+  <div class="container-fluid p-0" style="height: 100vh;">
     {% block content %}{% endblock %}
   </div>
   

@@ -12,13 +12,16 @@ team_game = db.Table('team_game',
 class Game(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
+    start_time = db.Column(db.DateTime, default=datetime.utcnow)
     description = db.Column(db.Text)
-    locations = db.relationship('Location', backref='game', lazy=True)
+    locations = db.relationship('Location', back_populates='game', lazy=True)
     characters = db.relationship('Character', backref='game', lazy=True)
     
     teams = db.relationship('Team', back_populates='game') # <-- FIXED
 
-
+    def __str__(self):
+        return self.name
+    
 class Location(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
@@ -28,6 +31,11 @@ class Location(db.Model):
     clue_text = db.Column(db.Text)
     unlock_condition = db.Column(db.String, nullable=True)
 
+    game = db.relationship('Game', back_populates='locations')  # <-- Add this line
+
+    def __str__(self):
+        return self.name
+    
 class Character(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
@@ -37,17 +45,22 @@ class Character(db.Model):
     location = db.relationship('Location', backref='characters')
     dialogue = db.Column(db.Text)
 
+    def __str__(self):
+        return self.name
+
 class Team(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
     clues_found = db.Column(db.PickleType, default=list)
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
-    games = db.relationship('Game', secondary=team_game, back_populates='teams')
+    end_time = db.Column(db.DateTime, nullable=True)  # <-- Add this line
     discoverable = db.Column(db.Boolean, default=True)  # Whether other teams can find/join
-
-    memberships = db.relationship('TeamMembership', back_populates='team')
+    memberships = db.relationship('TeamMembership', back_populates='team', cascade="all, delete-orphan")
     game = db.relationship('Game', back_populates='teams')
+    
+    def __str__(self):
+        return self.name
     
 class User(db.Model,UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -56,13 +69,22 @@ class User(db.Model,UserMixin):
     picture_url = db.Column(db.String(200))
     password_hash = db.Column(db.String(128))  # Add password hash for authentication
 
-    team_memberships = db.relationship('TeamMembership', back_populates='user')
+    team_memberships = db.relationship('TeamMembership', back_populates='user', cascade="all, delete-orphan")
 
+    def __str__(self):
+        return self.display_name
+    
 class TeamMembership(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=False)
-    __table_args__ = (db.UniqueConstraint('user_id', 'team_id', name='_user_team_uc'),)
-
+    role = db.Column(db.String(20), default='member')  # 'captain' or 'member'
+    __table_args__ = (db.UniqueConstraint('user_id', 'team_id', name='_user_team_uc'),
+                      #db.UniqueConstraint('user_id', 'game_id', name='_user_game_uc')
+                      )
     user = db.relationship('User', back_populates='team_memberships')
     team = db.relationship('Team', back_populates='memberships')
+    # Convenience property to get game_id from team
+    @property
+    def game_id(self):
+        return self.team.game_id
