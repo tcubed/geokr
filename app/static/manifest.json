@@ -1,0 +1,9 @@
+{
+  "name": "GeoKR",
+  "short_name": "GeoKR",
+  "description": "A location-based clue hunt game.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d6efd"
+}
