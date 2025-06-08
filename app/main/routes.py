@@ -101,7 +101,12 @@ def join_game():
 @login_required
 def options():
     debug_mode = request.cookies.get('debug_mode') == '1'
-    watch_position = request.cookies.get('watch_position') == '1'
+    watch_position = request.cookies.get('watch_position')
+    # Convert to boolean: checked if '1', unchecked if '0' or not set
+    if watch_position is None:
+        watch_position = True  # default ON
+    else:
+        watch_position = (watch_position == '1')
     return render_template('user/options.html', debug_mode=debug_mode, watch_position=watch_position)
 
 @main_bp.route('/faq')

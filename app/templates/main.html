@@ -94,7 +94,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     let currentZoom = 18; // default zoom
     let lastDebugAlertTime = 0; // Track last alert time (in ms)
 
-    const distanceThreshold = 30; // meters
+    const distanceThreshold = 5; // meters
 
     const redIcon = L.icon({
         iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
@@ -128,6 +128,23 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
     let watchId = null;
     const gameId = {{ game.id }};
+
+    function startTracking() {
+      if (watchPosition && watchId === null && navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition(
+          getCluesFromPosition,
+          err => alert("Geolocation error: " + err.message),
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+        );
+      }
+    }
+
+    function stopTracking() {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+    }
 
     async function getCluesFromPosition(position) {
       const lat = position.coords.latitude;
@@ -194,7 +211,10 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
           // Calculate distance from user to clue
           const distance = haversine(lat, lon, clue.latitude, clue.longitude);
 
-          const clueMarker = L.marker([clue.latitude, clue.longitude], { icon: redIcon }).addTo(map);
+          const clueMarker = L.marker([clue.latitude, clue.longitude],
+                    { icon: redIcon,
+                      zIndexOffset:1000  // Ensure clue markers are above user marker
+                    }).addTo(map);
 
           if (distance <= distanceThreshold) {
             clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
@@ -368,8 +388,12 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
           maxZoom: 19,
           attribution: '© OpenStreetMap'
         }).addTo(map);
-        marker = L.marker([lat, lon]).addTo(map)
+
+        marker = L.marker([lat, lon],
+          {zIndexOffset:0}
+        ).addTo(map)
           .bindPopup('You are here').openPopup();
+
         // Listen for zoom changes
         map.on('zoomend', function() {
           currentZoom = map.getZoom();
@@ -380,7 +404,9 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
         if (marker) {
           marker.setLatLng([lat, lon]);
         } else {
-          marker = L.marker([lat, lon]).addTo(map)
+          marker = L.marker([lat, lon],
+            {zIndexOffset:0}
+          ).addTo(map)
             .bindPopup('You are here').openPopup();
         }
       }
@@ -393,6 +419,22 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
       });
     }
 
+    // Listen for page visibility changes
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopTracking();
+      } else {
+        startTracking();
+      }
+    });
+
+    // Optionally, start tracking immediately if watchPosition is enabled and page is visible
+    if (watchPosition && !document.hidden) {
+      startTracking();
+    }
     //loadGames();
+    // Automatically check for clues on first page load
+    getClues();
+
   </script>
 {% endblock %}
