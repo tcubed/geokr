@@ -60,11 +60,15 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   <div id="map"></div>
 
   <div id="bottom-buttons" class="d-flex gap-2">
-    <!-- Place your bottom buttons here -->
-    <button onclick="getClues()" class="btn btn-primary w-100">Check for Clues</button>
-    <!--
-    <button class="btn btn-primary w-50">Another Action</button>
-    -->
+    {% for action in actions %}
+      {% if action == "check_clues" %}
+        <button onclick="getClues()" class="btn btn-primary w-100 flex-fill">Check for Clues</button>
+      {% elif action == "mapper" %}
+        <button onclick="sendToNewPin()" class="btn btn-success w-100 flex-fill">New Pin</button>
+      {% else %}
+        <button class="btn btn-light w-100 flex-fill">{{ action|capitalize }}</button>
+      {% endif %}
+    {% endfor %}
   </div>
 </div>
 
@@ -90,6 +94,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
   <script>
     let map, marker;
+    let latestPosition = null;
     let clueMarkers = [];
     let currentZoom = 18; // default zoom
     let lastDebugAlertTime = 0; // Track last alert time (in ms)
@@ -150,6 +155,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
       const lat = position.coords.latitude;
       const lon = position.coords.longitude;
       const accuracy = position.coords.accuracy;
+      latestPosition = position; // Store the latest position
 
       const posTime = new Date(position.timestamp);
       const now = new Date();
@@ -217,7 +223,25 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
                     }).addTo(map);
 
           if (distance <= distanceThreshold) {
-            clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
+            //clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
+            //clueMarker.on('click', function(e) {
+            //  window.location = `/location/${clue.id}`;
+            //});
+            // Check if this location has been visited before
+            let visited = JSON.parse(localStorage.getItem('visited_locations') || '[]');
+            if (!visited.includes(clue.id)) {
+              // Mark as visited
+              visited.push(clue.id);
+              localStorage.setItem('visited_locations', JSON.stringify(visited));
+              // Redirect automatically
+              window.location = `/location/${clue.id}`;
+            } else {
+              // Already visited, just show popup and allow manual click
+              clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
+              clueMarker.on('click', function(e) {
+                window.location = `/location/${clue.id}`;
+              });
+            }
           } else {
             clueMarker.bindPopup(`${clue.name}: Get closer to unlock this clue!`);
             clueMarker.on('click', function(e) {
@@ -409,6 +433,28 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
           ).addTo(map)
             .bindPopup('You are here').openPopup();
         }
+      }
+    }
+
+    function sendToNewPin() {
+      if (latestPosition) {
+        const lat = latestPosition.coords.latitude;
+        const lon = latestPosition.coords.longitude;
+        window.location = `/new_pin?lat=${lat}&lon=${lon}`;
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          window.location = `/new_pin?lat=${lat}&lon=${lon}`;
+        }, function(err) {
+          alert("Geolocation error: " + err.message);
+        }, {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 20000
+        });
+      } else {
+        alert("Geolocation not supported.");
       }
     }
 

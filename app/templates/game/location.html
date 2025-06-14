@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4" style="max-width:500px;">
+  <h1>{{ location.name }}</h1>
+  {% if location.image_url %}
+    <img src="{{ location.image_url }}" alt="{{ location.name }}" class="img-fluid mb-3" style="max-height:300px;">
+  {% endif %}
+  <div class="mb-3">
+    <p>{{ location.clue_text }}</p>
+  </div>
+</div>
+{% endblock %}

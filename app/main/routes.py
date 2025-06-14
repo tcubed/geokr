@@ -14,7 +14,7 @@ from sqlalchemy import or_, and_
 
 from functools import wraps
 from app.models import (Location, Character, Team, Game, User, db, team_game,
-                        TeamMembership)
+                        TeamMembership,Role,UserRole)
 
 from app.main import main_bp
 
@@ -56,7 +56,16 @@ def main_page():
         current_app.logger.info("main_page: No active team found for user %s", current_user.id)
         return redirect(url_for('main.join_game'))
     game = team.game  # Get the game from the team relationship
-    return render_template('main.html', team=team, game=game)
+
+    actions=['check_clues']
+    # If user has "mapper" role and cookie is set, append "mapper" to actions
+    if (
+        any(role.role.name == "mapper" for role in current_user.user_roles)
+        and request.cookies.get('mapper_mode') == '1'
+    ):
+        actions.append('mapper')
+
+    return render_template('main.html', team=team, game=game,actions=actions)
 # @main_bp.route('/')
 # def index():
 #     print("Rendering index.html")
@@ -121,7 +130,15 @@ def options():
         watch_position = True  # default ON
     else:
         watch_position = (watch_position == '1')
-    return render_template('user/options.html', debug_mode=debug_mode, watch_position=watch_position)
+
+    options=[]
+    # Check if user has "mapper" role
+    if any(role.role.name == "mapper" for role in current_user.user_roles):
+        options.append("mapper")
+
+    return render_template('user/options.html', debug_mode=debug_mode, 
+                           watch_position=watch_position,
+                           options=options)
 
 @main_bp.route('/faq')
 def faq():
@@ -139,7 +156,17 @@ def register():
         user = User(email=email, display_name=display_name,
                     password_hash=generate_password_hash(password))
         db.session.add(user)
+        #db.session.commit()
+
+        # Assign "user" role
+        user_role = Role.query.filter_by(name="user").first()
+        if not user_role:
+            user_role = Role(name="user", description="Standard user")
+            db.session.add(user_role)
+            #db.session.commit()
+        db.session.add(UserRole(user_id=user.id, role_id=user_role.id))
         db.session.commit()
+
         flash('Registration successful. Please log in.', 'success')
         return redirect(url_for('main.login'))
     return render_template('user/register.html')
@@ -187,10 +214,44 @@ def account():
             user.picture_url = '/' + pic_path.replace('\\', '/')
         db.session.commit()
         flash('Account updated!', 'success')
-        return redirect(url_for('main.account'))
+        return redirect(url_for('main.main_page'))
 
     return render_template('user/account.html', user=user)
 
+@main_bp.route('/new_pin', methods=['GET', 'POST'])
+@login_required
+def new_pin():
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    if request.method == 'POST':
+        title = request.form.get('title')
+        description = request.form.get('description')
+
+        team = get_active_team(current_user)
+        if not team:
+            flash("No active team found.", "danger")
+            return redirect(url_for('main.main_page'))
+        game_id = team.game_id
+
+        # Save the new pin/location here (implement as needed)
+        # Example:
+        new_location = Location(
+            game_id=game_id,  # set as appropriate
+            name=title,
+            latitude=lat,
+            longitude=lon,
+            clue_text=description
+        )
+        db.session.add(new_location)
+        db.session.commit()
+
+        flash('New pin added!', 'success')
+        return redirect(url_for('main.main_page'))
+    return render_template('game/new_pin.html', lat=lat, lon=lon)
 
 
-
+@main_bp.route('/location/<int:location_id>')
+@login_required
+def location(location_id):
+    location = Location.query.get_or_404(location_id)
+    return render_template('game/location.html', location=location)

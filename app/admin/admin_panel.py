@@ -2,7 +2,8 @@ from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.form import Select2Widget
 from wtforms_sqlalchemy.fields import QuerySelectField
-from app.models import (db, Game, Team, Location, Character, User, TeamMembership)
+from app.models import (db, Game, Team, Location, Character, User, TeamMembership,
+                        Role,UserRole)
 
 class LocationAdmin(ModelView):
     column_list = ('id', 'name', 'game_id', 'latitude', 'longitude', 'clue_text', 'unlock_condition')
@@ -62,7 +63,31 @@ class TeamMembershipAdmin(ModelView):
         )
     )
 
+class UserRoleAdmin(ModelView):
+    column_list = ('id', 'user', 'role')
+    form_columns = ('user', 'role')
+    form_overrides = dict(
+        user=QuerySelectField,
+        role=QuerySelectField
+    )
+    form_args = dict(
+        user=dict(
+            query_factory=lambda: User.query.all(),
+            get_label='display_name',
+            allow_blank=False,
+            widget=Select2Widget()
+        ),
+        role=dict(
+            query_factory=lambda: Role.query.all(),
+            get_label='name',
+            allow_blank=False,
+            widget=Select2Widget()
+        )
+    )
 
+class RoleAdmin(ModelView):
+    column_list = ('id', 'name', 'description')
+    form_columns = ('name', 'description')
 
 def setup_admin(app):
     admin = Admin(app, name='GeoKR Admin', template_mode='bootstrap4')
@@ -74,3 +99,8 @@ def setup_admin(app):
     #admin.add_view(ModelView(Character, db.session))
     admin.add_view(CharacterAdmin(Character, db.session)) 
     admin.add_view(ModelView(User, db.session))
+
+    #admin.add_view(ModelView(Role, db.session))
+    admin.add_view(RoleAdmin(Role, db.session)) 
+    #admin.add_view(ModelView(UserRole, db.session))
+    admin.add_view(UserRoleAdmin(UserRole, db.session))

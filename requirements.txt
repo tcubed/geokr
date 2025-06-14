@@ -4,3 +4,4 @@ flask_admin
 flask-login
 flask-migrate
 wtforms-sqlalchemy
+wtforms<3.2

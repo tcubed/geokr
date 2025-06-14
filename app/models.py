@@ -35,6 +35,7 @@ class Location(db.Model):
     longitude = db.Column(db.Float)
     clue_text = db.Column(db.Text)
     unlock_condition = db.Column(db.String, nullable=True)
+    image_url = db.Column(db.String(300), nullable=True) 
 
     game = db.relationship('Game', back_populates='locations')  # <-- Add this line
 
@@ -76,6 +77,8 @@ class User(db.Model,UserMixin):
 
     team_memberships = db.relationship('TeamMembership', back_populates='user', cascade="all, delete-orphan")
 
+    user_roles = db.relationship('UserRole', back_populates='user')
+    
     def __str__(self):
         return self.display_name
     
@@ -93,3 +96,25 @@ class TeamMembership(db.Model):
     @property
     def game_id(self):
         return self.team.game_id
+    
+class Role(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.String(200))
+
+    user_roles = db.relationship('UserRole', back_populates='role')
+
+    def __str__(self):
+        return self.name
+
+class UserRole(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
+
+    user = db.relationship('User', back_populates='user_roles')
+    role = db.relationship('Role', back_populates='user_roles')
+
+    def __str__(self):
+        return f"{self.user.display_name} - {self.role.name}"
+
