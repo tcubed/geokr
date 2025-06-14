@@ -9,6 +9,8 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from werkzeug.utils import secure_filename
+from sqlalchemy import or_, and_
+
 
 from functools import wraps
 from app.models import (Location, Character, Team, Game, User, db, team_game,
@@ -65,8 +67,20 @@ def main_page():
 @login_required
 def join_game():
     # Show games that are active
-    yesterday = datetime.utcnow() - timedelta(days=1)
-    games = Game.query.filter(Game.start_time >= yesterday).all()
+    #yesterday = datetime.utcnow() - timedelta(days=1)
+    #games = Game.query.filter(Game.start_time >= yesterday).all()
+
+    now = datetime.utcnow()
+    games = Game.query.filter(
+        or_(
+            Game.mode == 'open',
+            and_(
+                Game.mode == 'competitive',
+                or_(Game.join_deadline == None, Game.join_deadline >= now)
+            )
+        )
+    ).all()
+
     teams_by_game = {
         game.id: [
             {"id": team.id, "name": team.name}

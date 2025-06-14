@@ -19,6 +19,11 @@ class Game(db.Model):
     
     teams = db.relationship('Team', back_populates='game') # <-- FIXED
 
+    # New fields:
+    mode = db.Column(db.String(20), default='open')  # 'open' or 'competitive'
+    join_deadline = db.Column(db.DateTime, nullable=True)  # Only for competitive games
+
+
     def __str__(self):
         return self.name
     

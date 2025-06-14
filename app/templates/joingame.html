@@ -13,11 +13,17 @@
     </div>
     <div class="mb-3">
       <label for="team_id" class="form-label">Join Existing Team</label>
-      <select name="team_id" id="team_id" class="form-select">
-        {% for team in teams_by_game[games[0].id] %}
-          <option value="{{ team.id }}">{{ team.name }}</option>
-        {% endfor %}
-      </select>
+      
+        {% if games and games|length > 0 %}
+            <select name="team_id" id="team_id" class="form-select" required>
+            {% for team in teams_by_game[games[0].id] %}
+            <option value="{{ team.id }}">{{ team.name }}</option>
+            {% endfor %}
+            </select>
+        {% else %}
+            <div class="alert alert-warning">No games available.</div>
+        {% endif %}
+      
     </div>
     <div class="mb-3">
       <label for="new_team_name" class="form-label">Or Create New Team</label>
