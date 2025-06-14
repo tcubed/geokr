@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="container mt-4" style="max-width:400px;">
   <h1>Manage Characters</h1>
 
   <form id="characterForm">
@@ -23,7 +24,7 @@
 
   <h2>Existing Characters</h2>
   <ul id="charactersList"></ul>
-
+</div>
   <script>
     let games = [];
     let editingCharacterId = null;
