@@ -27,6 +27,22 @@
       {% endif %}
       
     </div>
+
+    <div class="mb-3">
+      <ul>
+        {% for membership in current_user.team_memberships %}
+          <li>
+            {{ membership.team.name }} ({{ membership.team.game.name }})
+            {% if session.active_team_id != membership.team.id %}
+              <a href="{{ url_for('main.switch_team', team_id=membership.team.id) }}">Switch</a>
+            {% else %}
+              <strong>(Active)</strong>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+
+    </div>
       
     <button type="submit" class="btn btn-primary">Save</button>
   </form>

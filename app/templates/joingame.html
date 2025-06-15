@@ -15,7 +15,7 @@
       <label for="team_id" class="form-label">Join Existing Team</label>
       
         {% if games and games|length > 0 %}
-            <select name="team_id" id="team_id" class="form-select" required>
+            <select name="team_id" id="team_id" class="form-select">
             {% for team in teams_by_game[games[0].id] %}
             <option value="{{ team.id }}">{{ team.name }}</option>
             {% endfor %}
@@ -48,6 +48,16 @@
         option.textContent = team.name;
         teamSelect.appendChild(option);
       });
+    });
+
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+    const teamSelected = teamSelect && teamSelect.value;
+    const newTeamName = document.getElementById('new_team_name').value.trim();
+    if (!teamSelected && !newTeamName) {
+        e.preventDefault();
+        alert('Please select a team or enter a new team name.');
+    }
     });
   </script>
 {% endblock %}

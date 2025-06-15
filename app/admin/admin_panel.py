@@ -6,8 +6,8 @@ from app.models import (db, Game, Team, Location, Character, User, TeamMembershi
                         Role,UserRole)
 
 class LocationAdmin(ModelView):
-    column_list = ('id', 'name', 'game_id', 'latitude', 'longitude', 'clue_text', 'unlock_condition')
-    form_columns = ('name', 'game', 'latitude', 'longitude', 'clue_text', 'unlock_condition')
+    column_list = ('id', 'name', 'game_id', 'latitude', 'longitude', 'image_url','clue_text', 'unlock_condition')
+    form_columns = ('name', 'game', 'latitude', 'longitude', 'image_url','clue_text', 'unlock_condition')
 
     form_overrides = dict(game=QuerySelectField)
     form_args = dict(
@@ -42,8 +42,8 @@ class CharacterAdmin(ModelView):
     )
 
 class TeamMembershipAdmin(ModelView):
-    column_list = ('id', 'user', 'team', 'role')
-    form_columns = ('user', 'team', 'role')
+    column_list = ('id', 'user','team', 'role')
+    form_columns = ('user','team', 'role')
     form_overrides = dict(
         user=QuerySelectField,
         team=QuerySelectField
@@ -85,6 +85,21 @@ class UserRoleAdmin(ModelView):
         )
     )
 
+class TeamAdmin(ModelView):
+    column_list = ('id', 'game','name')
+    form_columns = ('game','name')
+    # form_overrides = dict(
+    #     game=QuerySelectField
+    # )
+    # form_args = dict(
+    #     game=dict(
+    #         query_factory=lambda: Game.query.all(),
+    #         get_label='name',
+    #         allow_blank=False,
+    #         widget=Select2Widget()
+    #     )
+    # )
+
 class RoleAdmin(ModelView):
     column_list = ('id', 'name', 'description')
     form_columns = ('name', 'description')
@@ -92,7 +107,9 @@ class RoleAdmin(ModelView):
 def setup_admin(app):
     admin = Admin(app, name='GeoKR Admin', template_mode='bootstrap4')
     admin.add_view(ModelView(Game, db.session))
-    admin.add_view(ModelView(Team, db.session))
+    #admin.add_view(ModelView(Team, db.session))
+    admin.add_view(TeamAdmin(Team, db.session))
+
     admin.add_view(TeamMembershipAdmin(TeamMembership, db.session))  # <-- Add this line
     #admin.add_view(ModelView(Location, db.session))
     admin.add_view(LocationAdmin(Location, db.session))

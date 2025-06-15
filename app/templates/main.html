@@ -96,7 +96,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     let map, marker;
     let latestPosition = null;
     let clueMarkers = [];
-    let currentZoom = 19; // default zoom
+    let currentZoom = parseInt(localStorage.getItem('mapZoom')) || 19; // default zoom
     let lastDebugAlertTime = 0; // Track last alert time (in ms)
 
     const distanceThreshold = 5; // meters
@@ -130,11 +130,14 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     }
     const debugMode = getCookie('debug_mode') === '1';
     const watchPosition = getCookie('watch_position') === '1';
+    const defaultPosMode = getCookie('default_pos_mode') === '1';
 
     let watchId = null;
     const gameId = {{ game.id }};
 
     function startTracking() {
+      if (defaultPosMode) return; // <-- Prevent tracking in default position mode
+
       if (watchPosition && watchId === null && navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
           getCluesFromPosition,
@@ -262,6 +265,41 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
         alert('No game selected.');
         return;
       }
+
+      if (defaultPosMode) {
+        // Fetch clues as usual, but use the first clue's location
+        const response = await fetch('/api/locations', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            game_id: gameId
+          })
+        });
+        const clues = await response.json();
+        if (clues.length > 0) {
+          const clue = clues[0];
+          const lat = clue.latitude;
+          const lon = clue.longitude;
+          showMap(lat, lon);
+
+          // Remove old clue markers
+          clueMarkers.forEach(m => map.removeLayer(m));
+          clueMarkers = [];
+
+          clues.forEach(clue => {
+            if (clue.latitude && clue.longitude) {
+              const clueMarker = L.marker([clue.latitude, clue.longitude], { icon: redIcon, zIndexOffset: 1000 }).addTo(map);
+              clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
+              clueMarker.on('click', function(e) {
+                window.location = `/location/${clue.id}`;
+              });
+              clueMarkers.push(clueMarker);
+            }
+          });
+        }
+        return;
+      }
+
 
       if (!navigator.geolocation) {
         alert("Geolocation not supported.");
@@ -421,6 +459,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
         // Listen for zoom changes
         map.on('zoomend', function() {
           currentZoom = map.getZoom();
+          localStorage.setItem('mapZoom', currentZoom); // Save zoom to localStorage
         });
       } else {
         map.setView([lat, lon], currentZoom);
@@ -459,7 +498,8 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     }
 
     // Optionally, show map on page load if geolocation is available
-    if (navigator.geolocation) {
+    // Only show map on page load using geolocation if default_pos_mode is NOT enabled
+    if (!defaultPosMode && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
         showMap(pos.coords.latitude, pos.coords.longitude);
       });
@@ -475,7 +515,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     });
 
     // Optionally, start tracking immediately if watchPosition is enabled and page is visible
-    if (watchPosition && !document.hidden) {
+    if (watchPosition && !defaultPosMode && !document.hidden) {
       startTracking();
     }
     //loadGames();

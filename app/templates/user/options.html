@@ -11,6 +11,7 @@
       </label>
     </div>
 
+    <h4 class="mt-4">Troubleshooting</h4>
     <div class="form-check">
       <input class="form-check-input" type="checkbox" id="debug_mode" name="debug_mode"
         {% if debug_mode %}checked{% endif %}>
@@ -19,7 +20,16 @@
       </label>
     </div>
 
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="default_pos_mode" name="default_pos_mode"
+        {% if request.cookies.get('default_pos_mode') == '1' %}checked{% endif %}>
+      <label class="form-check-label" for="default_pos_mode">
+        Default Position mode
+      </label>
+    </div>
+
     {% if "mapper" in options %}
+    <h4 class="mt-4">Game Building</h4>
     <div class="form-check">
       <input class="form-check-input" type="checkbox" id="mapper_mode" name="mapper_mode"
         {% if request.cookies.get('mapper_mode') == '1' %}checked{% endif %}>
@@ -37,15 +47,17 @@
     e.preventDefault();
     const debug = document.getElementById('debug_mode').checked ? '1' : '';
     const watch = document.getElementById('watch_position').checked ? '1' : '';
+    const default_pos = document.getElementById('default_pos_mode').checked ? '1' : '';
     document.cookie = "debug_mode=" + debug + ";path=/;max-age=31536000";
     document.cookie = "watch_position=" + watch + ";path=/;max-age=31536000";
+    document.cookie = "default_pos_mode=" + default_pos + ";path=/;max-age=31536000";
 
     const mapperBox = document.getElementById('mapper_mode');
     if (mapperBox) {
       const mapper = mapperBox.checked ? '1' : '';
       document.cookie = "mapper_mode=" + mapper + ";path=/;max-age=31536000";
     }
-    
+
     //location.reload();
     window.location = "/main"; // Redirect to main page
   });

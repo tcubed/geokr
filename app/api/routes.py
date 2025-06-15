@@ -10,10 +10,21 @@ from app.main import utils
 @api_bp.route('/api/locations', methods=['POST'])
 def get_nearby_locations():
     data = request.get_json()
-    lat, lon = data['latitude'], data['longitude']
+    #lat, lon = data['latitude'], data['longitude']
+    lat = data.get('latitude')
+    lon = data.get('longitude')
     game_id = data.get('game_id')
     if not game_id:
         return jsonify({"error": "game_id required"}), 400
+    
+    # If latitude or longitude are missing, use the first location's coordinates for the game
+    if lat is None or lon is None:
+        location = Location.query.filter_by(game_id=game_id).first()
+        if location:
+            lat = location.latitude
+            lon = location.longitude
+        else:
+            return jsonify([])  # No locations for this game
     
     print(f"Received coordinates: ({lat}, {lon}) for game_id: {game_id}")
 

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 #from datetime import timedelta
 from flask import (Blueprint, render_template, redirect, request, jsonify, 
-                   url_for,
+                   url_for,session,
                    Response,current_app,flash)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -37,6 +37,7 @@ def get_active_team(user):
         .filter(Team.end_time == None)  # Team not finished
         .first()
     )
+    #session['active_team_id'] = membership.team_id
     return membership.team if membership else None
 
 @main_bp.route('/')
@@ -51,7 +52,15 @@ def index():
 @main_bp.route('/main')
 @login_required
 def main_page():
-    team = get_active_team(current_user)
+    #team = get_active_team(current_user)
+    team_id = session.get('active_team_id')
+    if team_id:
+        team = Team.query.get(team_id)
+    else:
+        team = get_active_team(current_user)
+        if team:
+            session['active_team_id'] = team.id
+
     if not team:
         current_app.logger.info("main_page: No active team found for user %s", current_user.id)
         return redirect(url_for('main.join_game'))
@@ -102,23 +111,61 @@ def join_game():
         team_id = request.form.get('team_id')
         new_team_name = request.form.get('new_team_name')
 
+        # Check if user is already a member of any team in this game
+        existing_membership = (
+            db.session.query(TeamMembership)
+            .join(Team)
+            .filter(TeamMembership.user_id == current_user.id)
+            .filter(Team.game_id == game_id)
+            .first()
+        )
+
         if team_id:  # Join existing team
-            team = Team.query.get(team_id)
-            if team:
-                membership = TeamMembership(user_id=current_user.id, team_id=team.id)
-                db.session.add(membership)
-                db.session.commit()
+            # If user is already a member of this team, redirect
+            already_on_team = (
+                TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
+            )
+            if already_on_team:
+                flash("You are already a member of this team.", "info")
                 return redirect(url_for('main.main_page'))
+            # If user is on a different team in this game, prevent joining another
+            if existing_membership:
+                flash("You are already on a team for this game.", "warning")
+                return redirect(url_for('main.main_page'))
+            # Otherwise, add membership
+            membership = TeamMembership(user_id=current_user.id, team_id=team_id)
+            session['active_team_id'] = membership.team_id
+            db.session.add(membership)
+            db.session.commit()
+            return redirect(url_for('main.main_page'))
+    
         elif new_team_name:  # Create new team
+            # If user is already on a team in this game, prevent creating another
+            if existing_membership:
+                flash("You are already on a team for this game.", "warning")
+                return redirect(url_for('main.main_page'))
+            # Create new team and membership
             team = Team(name=new_team_name, game_id=game_id)
             db.session.add(team)
             db.session.commit()
             membership = TeamMembership(user_id=current_user.id, team_id=team.id, role='captain')
+            session['active_team_id'] = membership.team_id
             db.session.add(membership)
             db.session.commit()
             return redirect(url_for('main.main_page'))
 
     return render_template('joingame.html', games=games, teams_by_game=teams_by_game)
+
+@main_bp.route('/switch_team/<int:team_id>')
+@login_required
+def switch_team(team_id):
+    membership = TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
+    if membership:
+        session['active_team_id'] = team_id
+        flash("Switched to new team/game.", "success")
+    else:
+        flash("You are not a member of that team.", "danger")
+    return redirect(url_for('main.main_page'))
 
 @main_bp.route('/options')
 @login_required
