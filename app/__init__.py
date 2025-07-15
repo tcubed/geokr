@@ -34,8 +34,12 @@ def create_app():
     login_manager.init_app(app)
 
     @app.context_processor
-    def inject_user():
-        return dict(current_user=current_user)
+    def inject_user_flags():
+        return {
+            'is_admin': current_user.is_authenticated and current_user.is_admin
+        }
+    # def inject_user():
+    #     return dict(current_user=current_user)
     
     with app.app_context():
         #from . import routes

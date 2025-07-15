@@ -1,8 +1,15 @@
-from flask import Blueprint, render_template, request, jsonify, Response
+from flask import (Blueprint, render_template, request, jsonify, Response,
+                   redirect, url_for, flash)
+from flask_login import login_required
 from functools import wraps
-from app.models import Location, Character, Team, Game, db, team_game
+from app.models import (db,
+                        Team, team_game,
+                        Game,Location, Character, )
 
 from app.admin import admin_bp
+
+
+from flask import render_template
 
 
 def check_auth(username, password):
@@ -198,3 +205,42 @@ def admin_api_character_detail(id):
         db.session.delete(character)
         db.session.commit()
         return jsonify({"message": "Character deleted"})
+    
+
+
+@admin_bp.route('/copy_locations', methods=['GET', 'POST'])
+@login_required  # optionally add @admin_required if needed
+def copy_locations():
+    games = Game.query.order_by(Game.name).all()
+
+    if request.method == 'POST':
+        source_id = int(request.form['source_game'])
+        dest_id = int(request.form['destination_game'])
+
+        if source_id == dest_id:
+            flash("Source and destination games must be different.", "danger")
+            return redirect(url_for('main.copy_locations'))
+
+        source_game = Game.query.get_or_404(source_id)
+        dest_game = Game.query.get_or_404(dest_id)
+
+        count = 0
+        for loc in source_game.locations:
+            copied = Location(
+                game_id=dest_game.id,
+                name=loc.name,
+                latitude=loc.latitude,
+                longitude=loc.longitude,
+                image_url=loc.image_url,
+                clue_text=loc.clue_text,
+                #description=loc.description,
+                
+            )
+            db.session.add(copied)
+            count += 1
+
+        db.session.commit()
+        flash(f"Copied {count} locations from '{source_game.name}' to '{dest_game.name}'.", "success")
+        return redirect(url_for('admin_cust.copy_locations'))
+
+    return render_template('admin/copy_locations.html', games=games)

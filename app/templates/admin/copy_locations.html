@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Copy Locations Between Games{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+  <h2>Copy Locations Between Games</h2>
+  <form method="POST">
+    <div class="mb-3">
+      <label for="source_game" class="form-label">Source Game</label>
+      <select name="source_game" class="form-select" required>
+        {% for game in games %}
+          <option value="{{ game.id }}">{{ game.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label for="destination_game" class="form-label">Destination Game</label>
+      <select name="destination_game" class="form-select" required>
+        {% for game in games %}
+          <option value="{{ game.id }}">{{ game.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Copy Locations</button>
+  </form>
+</div>
+
+{% endblock %}

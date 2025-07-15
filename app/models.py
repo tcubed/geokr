@@ -1,5 +1,8 @@
 
 from . import db
+
+from sqlalchemy.dialects.sqlite import JSON
+
 from flask_login import UserMixin
 from datetime import datetime
 
@@ -14,19 +17,33 @@ class Game(db.Model):
     name = db.Column(db.String(100))
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     description = db.Column(db.Text)
+    join_deadline = db.Column(db.DateTime, nullable=True)  # Only for competitive games
+    mode = db.Column(db.String(20), default='open')  # 'open' or 'competitive'
+
+    gametype_id = db.Column(db.Integer, db.ForeignKey('game_type.id', name='fk_game_gametype_id'), nullable=True)
+    discoverability = db.Column(db.String(20), nullable=True, default='public')
+
+    data = db.Column(JSON, nullable=True)           # flexible JSON blob
+
+    # relationships
+    gametype = db.relationship('GameType', back_populates='games')
     locations = db.relationship('Location', back_populates='game', lazy=True)
     characters = db.relationship('Character', backref='game', lazy=True)
-    
     teams = db.relationship('Team', back_populates='game') # <-- FIXED
-
-    # New fields:
-    mode = db.Column(db.String(20), default='open')  # 'open' or 'competitive'
-    join_deadline = db.Column(db.DateTime, nullable=True)  # Only for competitive games
-
+    team_location_assignments = db.relationship('TeamLocationAssignment', back_populates='game', cascade='all, delete-orphan')
 
     def __str__(self):
         return self.name
-    
+
+class GameType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+
+    games = db.relationship('Game', back_populates='gametype')
+
+    def __str__(self):
+        return self.name
+
 class Location(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
@@ -38,6 +55,7 @@ class Location(db.Model):
     image_url = db.Column(db.String(300), nullable=True) 
 
     game = db.relationship('Game', back_populates='locations')  # <-- Add this line
+    team_assignments = db.relationship('TeamLocationAssignment', back_populates='location', cascade='all, delete-orphan')
 
     def __str__(self):
         return self.name
@@ -65,7 +83,8 @@ class Team(db.Model):
     memberships = db.relationship('TeamMembership', back_populates='team', cascade="all, delete-orphan")
     
     game = db.relationship('Game', back_populates='teams')
-    
+    location_assignments = db.relationship('TeamLocationAssignment', back_populates='team', cascade='all, delete-orphan')
+
     def __str__(self):
         return self.name
     
@@ -83,6 +102,11 @@ class User(db.Model,UserMixin):
     def __str__(self):
         return self.display_name
     
+    @property
+    def is_admin(self):
+        return any(ur.role.name == 'admin' for ur in self.user_roles)
+        #return self.user_roles.join(Role).filter(Role.name == 'admin').count() > 0
+    
 class TeamMembership(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -97,7 +121,26 @@ class TeamMembership(db.Model):
     @property
     def game_id(self):
         return self.team.game_id
-    
+
+class TeamLocationAssignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
+    game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
+
+    # Optional: track completion
+    found = db.Column(db.Boolean, default=False)
+    timestamp_found = db.Column(db.DateTime)
+
+    __table_args__ = (
+        db.UniqueConstraint('team_id', 'location_id', name='_team_location_uc'),
+    )
+
+    team = db.relationship('Team', back_populates='location_assignments')
+    location = db.relationship('Location', back_populates='team_assignments')
+    game = db.relationship('Game', back_populates='team_location_assignments')
+
+
 class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)

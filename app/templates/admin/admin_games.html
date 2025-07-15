@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="container mt-4" style="max-width:400px;">
   <h1>Manage Games</h1>
   <form id="gameForm">
     <input type="text" id="gameName" placeholder="Game Name" required />
@@ -9,7 +10,7 @@
     <button type="submit">Add Game</button>
   </form>
   <ul id="gamesList"></ul>
-
+</div>
   <script>
     async function fetchGames() {
       const res = await fetch('/admin/api/games');

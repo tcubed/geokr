@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}
+Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+  .found-image {
+    filter: grayscale(100%);
+    opacity: 0.6;
+  }
+
+  .found-label {
+    color: white;
+    background-color: rgba(0,0,0,0.6);
+    padding: 0.25rem 0.5rem;
+    font-weight: bold;
+    font-size: 1.25rem;
+    border-radius: 0.3rem;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+  }
+</style>
+
+<div class="container mt-4">
+  <h2>Assigned Locations{% if game and game.name %} for {{ game.name }}{% endif %}</h2>
+  
+  {% if locations %}
+    <div class="row row-cols-1 row-cols-md-2 g-4">
+      {% for loc in locations %}
+        <div class="col">
+          <div class="card h-100">
+            {% if loc.image_url %}
+            <!--
+              <img src="{{ url_for('static', filename='images/' ~ loc.image_url) }}"
+                class="img-fluid"
+                style="max-height: 300px; object-fit: contain;"
+                alt="{{ loc.location_name }}">
+                -->
+              <div class="location-card position-relative" style="display: inline-block;">
+                <img
+                  src="{{ url_for('static', filename='images/' ~ loc.image_url) }}"
+                  alt="{{ loc.location_name }}"
+                  class="card-img-top {% if loc.found %}found-image{% endif %}"
+                >
+
+                {% if loc.found %}
+                <div class="found-label position-absolute top-50 start-50 translate-middle">
+                  FOUND
+                </div>
+                {% endif %}
+              </div>
+            {% else %}
+              <img src="{{ url_for('static', filename='images/no_image.png') }}"
+                class="card-img-top"
+                style="max-height: 300px; object-fit: contain;"
+                alt="No image available">
+            {% endif %}
+            <div class="card-body">
+              <h5 class="card-title">{{ loc.name }}</h5>
+              {% if loc.lat and loc.lon %}
+                <p class="card-text">Coordinates: {{ loc.latitude }}, {{ loc.longitude }}</p>
+              {% endif %}
+              {% if loc.found %}
+                <span class="badge bg-success">Found</span>
+              {% else %}
+                <span class="badge bg-secondary">Not Found</span>
+              {% endif %}
+            </div>
+            {% if loc.timestamp_found %}
+              <div class="card-footer text-muted">
+                Found at {{ loc.timestamp_found }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>No locations assigned.</p>
+  {% endif %}
+</div>
+{% endblock %}

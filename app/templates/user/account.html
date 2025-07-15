@@ -28,15 +28,21 @@
       
     </div>
 
+    <h3>Switch Game</h3>
     <div class="mb-3">
       <ul>
         {% for membership in current_user.team_memberships %}
-          <li>
-            {{ membership.team.name }} ({{ membership.team.game.name }})
+          <li class="mb-2">
             {% if session.active_team_id != membership.team.id %}
-              <a href="{{ url_for('main.switch_team', team_id=membership.team.id) }}">Switch</a>
+              <a href="{{ url_for('main.switch_team', team_id=membership.team.id) }}" class="btn btn-success btn-sm me-2">
+                Switch
+              </a>
+              {{ membership.team.name }} ({{ membership.team.game.name }})
             {% else %}
-              <strong>(Active)</strong>
+              <button class="btn btn-secondary btn-sm me-2" disabled>
+                <strong>Active</strong>
+              </button>
+              <strong>{{ membership.team.name }} ({{ membership.team.game.name }})</strong>
             {% endif %}
           </li>
         {% endfor %}

@@ -1,5 +1,7 @@
 import os
+import random
 from datetime import datetime, timedelta
+from itertools import cycle
 
 #from datetime import timedelta
 from flask import (Blueprint, render_template, redirect, request, jsonify, 
@@ -13,8 +15,11 @@ from sqlalchemy import or_, and_
 
 
 from functools import wraps
-from app.models import (Location, Character, Team, Game, User, db, team_game,
-                        TeamMembership,Role,UserRole)
+from app.models import (db, 
+                        User,Role,UserRole,
+                        Team, TeamMembership,TeamLocationAssignment,
+                        Game, Location, Character, team_game,
+                        )
 
 from app.main import main_bp
 
@@ -41,14 +46,38 @@ def get_active_team(user):
     return membership.team if membership else None
 
 @main_bp.route('/')
+@login_required
 def index():
+    #team_id = session.get('active_team_id')
+
     if current_user.is_authenticated:
-        return redirect(url_for('main.main_page'))
+        #return redirect(url_for('main.main_page'))
+        team_id = session.get('active_team_id')
+        if team_id:
+            team = Team.query.get(team_id)
+            if team and team.game and team.game.gametype:
+                gametype = team.game.gametype.name.lower()
+
+                if gametype == 'navigation':
+                    return redirect(url_for('main.main_page', #game_id=team.game.id
+                                            ))
+                elif gametype == 'findloc':
+                    return redirect(url_for('main.findloc', #game_id=team.game.id
+                                            ))
+                else:
+                    flash("Unsupported game type for this team.", "warning")
+            else:
+                flash("Could not find valid team or game info.", "warning")
+        else:
+            flash("No active team selected.", "warning")
     # Show games whose start date is no older than yesterday
     yesterday = datetime.utcnow() - timedelta(days=1)
     games = Game.query.filter(Game.start_time >= yesterday).all()
     return render_template('index.html', games=games)
 
+#================================================================
+# MAP GAME
+#================================================================
 @main_bp.route('/main')
 @login_required
 def main_page():
@@ -75,6 +104,41 @@ def main_page():
         actions.append('mapper')
 
     return render_template('main.html', team=team, game=game,actions=actions)
+
+#================================================================
+# FIND LOCATION GAME
+#================================================================
+@main_bp.route('/findloc')
+@login_required
+def findloc():
+    #team = get_active_team(current_user)
+    team_id = session.get('active_team_id')
+    if team_id:
+        team = Team.query.get(team_id)
+    else:
+        team = get_active_team(current_user)
+        if team:
+            session['active_team_id'] = team.id
+
+    if not team:
+        current_app.logger.info("main_page: No active team found for user %s", current_user.id)
+        return redirect(url_for('main.join_game'))
+    game = team.game  # Get the game from the team relationship
+
+    actions=['check_clues']
+    # If user has "mapper" role and cookie is set, append "mapper" to actions
+    if (
+        any(role.role.name == "mapper" for role in current_user.user_roles)
+        and request.cookies.get('mapper_mode') == '1'
+    ):
+        actions.append('mapper')
+
+    #return render_template('main.html', team=team, game=game,actions=actions)
+    # 🧠 Fetch the locations assigned to this team
+    assignments = TeamLocationAssignment.query.filter_by(team_id=team.id).all()
+    locations = [assignment.location for assignment in assignments]
+    
+    return render_template("findloc.html", game=game, locations=locations)
 # @main_bp.route('/')
 # def index():
 #     print("Rendering index.html")
@@ -160,12 +224,25 @@ def join_game():
 @login_required
 def switch_team(team_id):
     membership = TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
-    if membership:
-        session['active_team_id'] = team_id
-        flash("Switched to new team/game.", "success")
-    else:
+    if not membership:
         flash("You are not a member of that team.", "danger")
-    return redirect(url_for('main.main_page'))
+        return redirect(url_for('main.main_page'))
+
+    session['active_team_id'] = team_id
+    flash("Switched to new team/game.", "success")
+
+    game = membership.team.game
+    gametype_name = (game.gametype.name.lower() if game and game.gametype else None)
+
+    if gametype_name == 'navigation':
+        return redirect(url_for('main.main_page', #game_id=game.id
+                                ))
+    elif gametype_name == 'findloc':
+        return redirect(url_for('main.findloc', #game_id=game.id
+                                ))
+    else:
+        flash("Unsupported or undefined game type.", "warning")
+        return redirect(url_for('main.main_page'))
 
 @main_bp.route('/options')
 @login_required
@@ -302,3 +379,72 @@ def new_pin():
 def location(location_id):
     location = Location.query.get_or_404(location_id)
     return render_template('game/location.html', location=location)
+
+
+
+import random
+from itertools import cycle
+
+def assign_locations_to_teams(game_id):
+    game = Game.query.get(game_id)
+    if not game:
+        raise ValueError(f"Game with ID {game_id} not found.")
+
+    teams = Team.query.filter_by(game_id=game_id).all()
+
+    # Check if 'routes' is defined in game.data
+    routes = None
+    num_locations_per_team=5
+    if game.data and isinstance(game.data, dict):
+        routes = game.data.get('routes')
+        num_locations_per_team = game.data.get('num_locations_per_team', num_locations_per_team)
+    
+
+    if routes and isinstance(routes, list) and all(isinstance(r, list) for r in routes):
+        # Assign based on predefined routes
+        route_cycle = cycle(routes)  # Cycle through routes if there are more teams than routes
+        for team in teams:
+            route = next(route_cycle)
+            for loc_id in route:
+                assignment = TeamLocationAssignment(
+                    team_id=team.id,
+                    location_id=loc_id,
+                    game_id=game_id
+                )
+                db.session.add(assignment)
+    else:
+        # Fallback: Random assignment
+        all_location_ids = [loc.id for loc in Location.query.filter_by(game_id=game_id).all()]
+        for team in teams:
+            assigned = random.sample(all_location_ids, min(num_locations_per_team, len(all_location_ids)))
+            for loc_id in assigned:
+                assignment = TeamLocationAssignment(
+                    team_id=team.id,
+                    location_id=loc_id,
+                    game_id=game_id
+                )
+                db.session.add(assignment)
+
+    db.session.commit()
+
+
+@main_bp.route('/start_game/<int:game_id>', methods=['POST'])
+@login_required
+def start_game(game_id):
+    game = Game.query.get(game_id)
+    if not game:
+        return {"error": "Game not found"}, 404
+    
+    assign_locations_to_teams(game.id)
+    #return {"message": f"Locations assigned to teams for Game {game.name}"}, 200
+    flash(f"Game '{game.name}' started and locations assigned!", "success")
+    return redirect(url_for('main.index'))
+
+@main_bp.route('/game_admin')
+@login_required
+def game_admin():
+    if not current_user.is_admin:
+        flash("You don't have permission to view that page.", "warning")
+        return redirect(url_for('main.index'))  # or any other page
+    games = Game.query.order_by(Game.start_time.desc()).all()
+    return render_template('game/game_admin.html', games=games)
