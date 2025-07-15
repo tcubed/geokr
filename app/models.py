@@ -21,7 +21,7 @@ class Game(db.Model):
     mode = db.Column(db.String(20), default='open')  # 'open' or 'competitive'
 
     gametype_id = db.Column(db.Integer, db.ForeignKey('game_type.id', name='fk_game_gametype_id'), nullable=True)
-    discoverability = db.Column(db.String(20), nullable=True, default='public')
+    discoverable = db.Column(db.String(20), nullable=True, default='public')
 
     data = db.Column(JSON, nullable=True)           # flexible JSON blob
 

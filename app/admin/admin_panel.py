@@ -109,8 +109,8 @@ class TeamLocationAssignmentAdmin(ModelView):
 # GAME ADMINISTRATION
 # =======================================================
 class GameAdmin(ModelView):
-    column_list = ('id', 'name', 'gametype', 'mode', 'start_time',)
-    form_columns = ('name', 'description','gametype', 'mode', 'join_deadline','start_time','data')
+    column_list = ('id', 'name', 'gametype', 'discoverable','mode', 'start_time',)
+    form_columns = ('name', 'description','gametype', 'discoverable', 'mode', 'join_deadline','start_time','data')
 
     # Display gametype.name instead of the object
     column_labels = {
