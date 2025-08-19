@@ -1,0 +1,23 @@
+I am writing a geo-based game.  It has a flask backend and I'm writting so it can be offline when not on wifi.  My template will send all the locations to the player and prefetch assets while online.  Initially the player will only see the first clue (some combination of text or an image).  To start with, they will manually mark with a button that they are in the location, at which point the next clue will be revealed.  
+
+Project Warm-Up Summary
+I’m building a location-based team game app with Flask backend and a modern JavaScript frontend. Major elements include:
+Game Model: Games have multiple teams, each assigned specific locations (clues) to find.
+TeamLocationAssignment: Tracks which locations are assigned to which teams and whether they’ve been found.
+
+Frontend:
+Displays clues progressively to players.
+Supports multiple verification methods (button, geolocation, QR code, image matching, selfie).
+Uses IndexedDB and offline sync logic for offline play with deferred syncing of found locations.
+Uses localStorage for light-weight state caching.
+Heavy use of ES6 module imports and separation of DOM/event listener code into modules for cleaner structure.
+
+Backend:
+Flask app using flask-login, flask-admin, flask-migrate with SQLite database.
+API routes support fetching clues, marking locations found by any team member, and syncing team progress.
+Team-level “found” status is updated when any member finds a location, syncing across team members.
+
+Goals:
+Offline-first experience with robust sync when back online.
+Modular frontend JS with async/await and clear separation of concerns.
+Progressive clue reveal driven by geolocation or manual input.

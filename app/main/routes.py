@@ -5,7 +5,7 @@ from itertools import cycle
 
 #from datetime import timedelta
 from flask import (Blueprint, render_template, redirect, request, jsonify, 
-                   url_for,session,
+                   url_for,session,send_from_directory,
                    Response,current_app,flash)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -106,6 +106,32 @@ def main_page():
     return render_template('main.html', team=team, game=game,actions=actions)
 
 #================================================================
+#  DEBUG MAP
+#================================================================
+@main_bp.route('/map/debug')
+@login_required
+def debug_map():
+    team_id = session.get('active_team_id')
+    if team_id:
+        team = Team.query.get(team_id)
+    else:
+        team = get_active_team(current_user)
+        if team:
+            session['active_team_id'] = team.id
+
+    if not team:
+        current_app.logger.info("main_page: No active team found for user %s", current_user.id)
+        return redirect(url_for('main.join_game'))
+    game = team.game  # Get the game from the team relationship
+
+    return render_template("map/debug.html", game=game)
+
+@main_bp.route('/map/map_prefetch')
+@login_required
+def map_prefetch():
+    print("map_prefetch!")
+    return render_template("map/map_prefetch.html")
+#================================================================
 # FIND LOCATION GAME
 #================================================================
 @main_bp.route('/findloc')
@@ -121,7 +147,7 @@ def findloc():
             session['active_team_id'] = team.id
 
     if not team:
-        current_app.logger.info("main_page: No active team found for user %s", current_user.id)
+        current_app.logger.info("findloc: No active team found for user %s", current_user.id)
         return redirect(url_for('main.join_game'))
     game = team.game  # Get the game from the team relationship
 
@@ -136,14 +162,82 @@ def findloc():
     #return render_template('main.html', team=team, game=game,actions=actions)
     # 🧠 Fetch the locations assigned to this team
     assignments = TeamLocationAssignment.query.filter_by(team_id=team.id).all()
-    locations = [assignment.location for assignment in assignments]
-    
-    return render_template("findloc.html", game=game, locations=locations)
+    #locations = [assignment.location for assignment in assignments]
+
+    # Collect locations up to and including the first one not found
+    # limited_assignments = []
+    # for assignment in assignments:
+    #     limited_assignments.append(assignment)
+    #     if not assignment.found:
+    #         break
+
+    # #locations = [a.location for a in limited_assignments]
+    # location_data = [(a.location, a.found) for a in limited_assignments]
+
+
+    # for loc,found in location_data:
+    #     print(loc.name, loc.latitude, loc.longitude, loc.clue_text)
+    locations = []
+    current_index = None
+    for idx, assignment in enumerate(assignments):
+        loc = assignment.location
+        img_url = None
+        if loc.image_url:
+            img_url = url_for('static', filename=f'images/{loc.image_url}')  # Converts "game1/img1.png" → "/static/game1/img1.png"
+
+
+        loc_data = {
+            "id": loc.id,
+            "name": loc.name,
+            "lat": loc.latitude,
+            "lon": loc.longitude,
+            "clue_text": loc.clue_text,
+            "image_url": img_url,
+            "found": assignment.found
+        }
+        locations.append(loc_data)
+        if current_index is None and not assignment.found:
+            current_index = idx
+
+    # If all locations are found, set to last index
+    if current_index is None:
+        current_index = len(assignments) - 1
+
+    completion_duration = None
+    if team.end_time and team.start_time:
+        completion_duration = team.end_time - team.start_time  # timedelta
+    print('completion_duration:',completion_duration)
+    print("Number of locations being sent:", len(locations))
+
+    def format_timedelta(td):
+        total_seconds = int(td.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours}h {minutes}m {seconds}s"
+
+    formatted_completion_time = format_timedelta(completion_duration) if completion_duration else None
+
+
+    return render_template("findloc.html",
+                           game=game,
+                           team=team,
+                           locations=locations,
+                           current_index=current_index,
+                           completion_duration=formatted_completion_time,
+                           enable_geolocation=False,
+                           enable_selfie=False,
+                           enable_image_verify=False,
+                           enable_qr_scanner=False,
+                           )
 # @main_bp.route('/')
 # def index():
 #     print("Rendering index.html")
 #     game = Game.query.first()  # or however you get the current game
 #     return render_template('index.html', game=game)
+
+@main_bp.route('/offline')
+def offline():
+    return render_template('offline.html')
 
 @main_bp.route('/joingame', methods=['GET', 'POST'])
 @login_required
@@ -153,15 +247,18 @@ def join_game():
     #games = Game.query.filter(Game.start_time >= yesterday).all()
 
     now = datetime.utcnow()
-    games = Game.query.filter(
-        or_(
-            Game.mode == 'open',
-            and_(
-                Game.mode == 'competitive',
-                or_(Game.join_deadline == None, Game.join_deadline >= now)
-            )
-        )
-    ).all()
+    # games = Game.query.filter(
+    #     or_(
+    #         Game.mode == 'open',
+    #         and_(
+    #             Game.mode == 'competitive',
+    #             or_(Game.join_deadline == None, Game.join_deadline >= now)
+    #         )
+    #     )
+    # ).all()
+
+    games = Game.query.filter_by(discoverable='public').all()
+
 
     teams_by_game = {
         game.id: [
@@ -367,6 +464,12 @@ def new_pin():
             clue_text=description
         )
         db.session.add(new_location)
+
+        # Update game bounds
+        game = Game.query.get(game_id)
+        if game:
+            game.update_bounds_from_locations()
+
         db.session.commit()
 
         flash('New pin added!', 'success')
@@ -382,6 +485,83 @@ def location(location_id):
 
 
 
+from app.main.cache import deleted_tombstones, cleanup_tombstones
+
+@main_bp.route('/api/location/found', methods=['POST'])
+@login_required
+def mark_location_found():
+    data = request.get_json()
+    team_id = data.get('team_id')
+    location_id = data.get('location_id')
+    game_id = data.get('game_id')
+
+    if not all([team_id, location_id, game_id]):
+        return jsonify({"error": "Missing required parameters"}), 400
+
+    cleanup_tombstones()  # remove expired tombstones
+
+    key = (team_id, location_id, game_id)
+    if key in deleted_tombstones:
+        return jsonify({
+            "success": False,
+            "team_id": team_id,
+            "location_id": location_id,
+            "message": "This assignment was recently deleted",
+        }), 409
+    
+    tla = TeamLocationAssignment.query.filter_by(
+        team_id=team_id, location_id=location_id, game_id=game_id
+    ).first()
+
+    if not tla:
+        # If no assignment exists, create one
+        tla = TeamLocationAssignment(
+            team_id=team_id,
+            location_id=location_id,
+            game_id=game_id,
+            found=True,
+            timestamp_found=datetime.utcnow()
+        )
+        db.session.add(tla)
+    else:
+        # Mark found if not already
+        if not tla.found:
+            tla.found = True
+            tla.timestamp_found = datetime.utcnow()
+
+    db.session.commit()
+
+    # Compute current_index for client display
+    from sqlalchemy import func
+    found_count = db.session.query(func.count(TeamLocationAssignment.id))\
+        .filter_by(team_id=team_id, game_id=game_id, found=True).scalar()
+    current_index = max(0, found_count - 1)
+
+    return jsonify({
+        "success": True,
+        "team_id": team_id,
+        "location_id": location_id,
+        "found": tla.found,
+        "timestamp_found": tla.timestamp_found.isoformat(),
+        "current_index": current_index
+    })
+
+@main_bp.route('/api/team/<int:team_id>/locations', methods=['GET'])
+@login_required
+def get_team_locations(team_id):
+    assignments = TeamLocationAssignment.query.filter_by(team_id=team_id).all()
+
+    results = []
+    for a in assignments:
+        results.append({
+            "location_id": a.location_id,
+            "found": a.found,
+            "timestamp_found": a.timestamp_found.isoformat() if a.timestamp_found else None
+        })
+
+    return jsonify(results)
+
+
 import random
 from itertools import cycle
 
@@ -391,7 +571,9 @@ def assign_locations_to_teams(game_id):
         raise ValueError(f"Game with ID {game_id} not found.")
 
     teams = Team.query.filter_by(game_id=game_id).all()
-
+    if not teams:
+        raise ValueError(f"No teams found for game ID {game_id}.")
+    
     # Check if 'routes' is defined in game.data
     routes = None
     num_locations_per_team=5
@@ -399,33 +581,44 @@ def assign_locations_to_teams(game_id):
         routes = game.data.get('routes')
         num_locations_per_team = game.data.get('num_locations_per_team', num_locations_per_team)
     
-
+    created_count = 0
     if routes and isinstance(routes, list) and all(isinstance(r, list) for r in routes):
         # Assign based on predefined routes
         route_cycle = cycle(routes)  # Cycle through routes if there are more teams than routes
         for team in teams:
             route = next(route_cycle)
             for loc_id in route:
-                assignment = TeamLocationAssignment(
-                    team_id=team.id,
-                    location_id=loc_id,
-                    game_id=game_id
-                )
-                db.session.add(assignment)
+                exists = TeamLocationAssignment.query.filter_by(
+                    team_id=team.id, location_id=loc_id, game_id=game_id
+                ).first()
+                if not exists:
+                    assignment = TeamLocationAssignment(
+                        team_id=team.id,
+                        location_id=loc_id,
+                        game_id=game_id
+                    )
+                    db.session.add(assignment)
+                    created_count += 1
     else:
         # Fallback: Random assignment
         all_location_ids = [loc.id for loc in Location.query.filter_by(game_id=game_id).all()]
         for team in teams:
             assigned = random.sample(all_location_ids, min(num_locations_per_team, len(all_location_ids)))
             for loc_id in assigned:
-                assignment = TeamLocationAssignment(
-                    team_id=team.id,
-                    location_id=loc_id,
-                    game_id=game_id
-                )
-                db.session.add(assignment)
+                exists = TeamLocationAssignment.query.filter_by(
+                    team_id=team.id, location_id=loc_id, game_id=game_id
+                ).first()
+                if not exists:
+                    assignment = TeamLocationAssignment(
+                        team_id=team.id,
+                        location_id=loc_id,
+                        game_id=game_id
+                    )
+                    db.session.add(assignment)
+                    created_count += 1
 
     db.session.commit()
+    return f"Assigned {created_count} location(s) to teams in game {game_id}."
 
 
 @main_bp.route('/start_game/<int:game_id>', methods=['POST'])
@@ -448,3 +641,66 @@ def game_admin():
         return redirect(url_for('main.index'))  # or any other page
     games = Game.query.order_by(Game.start_time.desc()).all()
     return render_template('game/game_admin.html', games=games)
+
+@main_bp.route('/service-worker.js')
+def service_worker():
+    return send_from_directory('..', 'service-worker.js')
+
+@main_bp.route('/api/game/state', methods=['GET'])
+@login_required
+def get_game_state():
+    game_id = request.args.get('game_id', type=int)
+    team_id = request.args.get('team_id', type=int)
+
+    if not game_id or not team_id:
+        return jsonify({"error": "Missing game_id or team_id"}), 400
+
+    # Query all locations for this game assigned to this team
+    assignments = TeamLocationAssignment.query.filter_by(
+        game_id=game_id,
+        team_id=team_id
+    ).order_by(TeamLocationAssignment.id).all()
+
+    locations_found = []
+    current_index = 0
+    for idx, a in enumerate(assignments):
+        locations_found.append({
+            "location_id": a.location_id,
+            "found": a.found,
+            "timestamp_found": a.timestamp_found.isoformat() if a.timestamp_found else None
+        })
+        if a.found:
+            current_index = idx + 1  # current_index points to next location to find
+
+    return jsonify({
+        "game_id": game_id,
+        "team_id": team_id,
+        "current_index": current_index,
+        "locations_found": locations_found
+    })
+
+@main_bp.route('/debug/reset-locations', methods=['POST'])
+@login_required
+def reset_locations():
+    """
+    Reset all locations (TeamLocationAssignment) found flags and timestamps
+    for the current team and game. Debug only.
+    """
+    team_id = request.json.get('team_id') or session.get('active_team_id')
+    if not team_id:
+        return jsonify({"error": "team_id is required"}), 400
+
+    team = Team.query.get(team_id)
+    if not team:
+        return jsonify({"error": f"No team found with id {team_id}"}), 404
+
+    # Reset all assignments for this team
+    assignments = TeamLocationAssignment.query.filter_by(team_id=team.id).all()
+    for a in assignments:
+        a.found = False
+        a.found_at = None  # reset timestamp if you have one
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Reset {len(assignments)} location assignments for team {team.id}"
+    })

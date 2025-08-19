@@ -1,0 +1,9 @@
+video, img.overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: auto;
+}
+video { z-index: 1; }
+img.overlay { opacity: 0.4; z-index: 2; }
+#capture-btn { margin-top: 10px; padding: 10px 20px; font-size: 16px; }
+#status { margin-top: 15px; font-size: 18px; }

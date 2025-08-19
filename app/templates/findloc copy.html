@@ -1,0 +1,564 @@
+{% extends "base.html" %}
+
+{% block title %}
+Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
+{% endblock %}
+
+{% block head %}
+<!-- Leaflet CSS -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+/>
+
+
+
+{% endblock %}
+{% block content %}
+<style>
+  .found-image {
+    filter: grayscale(100%);
+    opacity: 0.6;
+  }
+
+  .found-label {
+    color: white;
+    background-color: rgba(0,0,0,0.6);
+    padding: 0.25rem 0.5rem;
+    font-weight: bold;
+    font-size: 1.25rem;
+    border-radius: 0.3rem;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+  }
+</style>
+
+<div id="prefetch-container">
+  <button id="prefetch-btn" style="display:none;">Download Game Assets</button>
+  <span id="offline-text" style="display:none; font-weight: bold; color: red;">Offline</span>
+</div>
+
+<div class="accordion" id="locationAccordion">
+  {% for loc in locations %}
+    {% if loop.index0 < next_index %}
+      <!-- Completed Locations -->
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-{{ loc.id }}">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#collapse-{{ loc.id }}" aria-expanded="false"
+                  aria-controls="collapse-{{ loc.id }}">
+            <i class="bi bi-check-circle-fill text-success me-2"></i>{{ loc.name }}
+          </button>
+        </h2>
+        <div id="collapse-{{ loc.id }}" class="accordion-collapse collapse"
+             aria-labelledby="heading-{{ loc.id }}" data-bs-parent="#locationAccordion">
+          <div class="accordion-body">
+            {% if loc.image_url %}
+              <div class="location-card position-relative mb-3">
+                <img src="{{ loc.image_url }}" alt="{{ loc.name }}"
+                     class="card-img-top found-image">
+                <div class="found-label position-absolute top-50 start-50 translate-middle">
+                  FOUND
+                </div>
+              </div>
+            {% endif %}
+            <p class="card-text text-muted">Clue: {{ loc.clue_text }}</p>
+            <span class="badge bg-success">Found</span>
+          </div>
+        </div>
+      </div>
+    {% elif loop.index0 == next_index %}
+      <!-- Current Location -->
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-{{ loc.id }}">
+          <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#collapse-{{ loc.id }}" aria-expanded="true"
+                  aria-controls="collapse-{{ loc.id }}">
+            <i class="bi bi-circle text-secondary me-2"></i>Current Clue
+          </button>
+        </h2>
+        <div id="collapse-{{ loc.id }}" class="accordion-collapse collapse show"
+             aria-labelledby="heading-{{ loc.id }}" data-bs-parent="#locationAccordion">
+          <div class="accordion-body">
+            {% if loc.image_url %}
+              <div class="location-card position-relative mb-3">
+                <img src="{{ loc.image_url }}" alt="{{ loc.name }}" class="card-img-top">
+              </div>
+            {% endif %}
+            <p class="card-text">{{ loc.clue_text | safe }}</p>
+
+            {% if loc.latitude and loc.longitude %}
+              <div id="map-{{ loc.id }}" class="map-container"
+                   data-lat="{{ loc.lat }}" data-lon="{{ loc.lon }}" style="height: 200px;"></div>
+            {% endif %}
+
+            <button id="found-btn" class="btn btn-primary mt-2">Mark as Found</button>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
+
+  {% if completion_duration %}
+    <div class="card mt-4 border-success">
+      <div class="card-header bg-success text-white">
+        🎉 Team Completed!
+      </div>
+      <div class="card-body">
+        <h5 class="card-title">Completion Time</h5>
+        <p class="card-text">{{ completion_duration }}</p>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+
+<!--
+
+<div class="accordion" id="locationAccordion">
+  {% for loc,found in location_data %}
+    <div class="accordion-item">
+
+      <h2 class="accordion-header" id="heading-{{ loc.id }}">
+        <button class="accordion-button {% if found %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loc.id }}" aria-expanded="{{ 'true' if not found else 'false' }}" aria-controls="collapse-{{ loc.id }}">
+          {% if found %}
+            <i class="bi bi-check-circle-fill text-success me-2"></i>{{ loc.name }}
+          {% else %}
+            <i class="bi bi-circle text-secondary me-2"></i>???
+          {% endif %}
+          
+        </button>
+      </h2>
+
+
+      <div id="collapse-{{ loc.id }}" class="accordion-collapse collapse {% if not found %}show{% endif %}" aria-labelledby="heading-{{ loc.id }}" data-bs-parent="#locationAccordion">
+        <div class="accordion-body">
+          
+          {% if loc.image_url %}
+          <div class="location-card position-relative mb-3">
+            <img
+              src="{{ url_for('static', filename='images/' ~ loc.image_url) }}"
+              alt="{{ loc.location_name }}"
+              class="card-img-top {% if found %}found-image{% endif %}">
+            {% if found %}
+              <div class="found-label position-absolute top-50 start-50 translate-middle">
+                FOUND
+              </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% if loc.show_pin and loc.latitude and loc.longitude %}
+            <div id="map-{{ loc.id }}" class="map-container" data-lat="{{ loc.latitude }}" data-lon="{{ loc.longitude }}" data-id="{{ loc.id }}" style="height: 200px;"></div>
+          {% endif %}
+
+          {% if loc.clue_text %}
+            <p class="card-text">{{ loc.clue_text | safe }}</p>
+          {% endif %}
+
+          {% if found %}
+            <span class="badge bg-success">Found</span>
+          {% else %}
+            <span class="badge bg-secondary">Not Found</span>
+          {% endif %}
+
+          {% if is_admin and not found %}
+          <small class="text-success d-block mt-1">{{loc.name}}</small>
+          <form method="POST" action="{{ url_for('api.mark_location_found_simple', location_id=loc.id) }}">
+            <button type="submit" class="btn btn-sm btn-outline-success mt-1">Mark as Found</button>
+          </form>
+          {% endif %}
+          
+
+          
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
+  
+  {% if completion_duration %}
+            <div class="card mt-4 border-success">
+              <div class="card-header bg-success text-white">
+                🎉 Team Completed!
+              </div>
+              <div class="card-body">
+                <h5 class="card-title">Completion Time</h5>
+                <p class="card-text">
+                  {{ completion_duration }}
+                </p>
+              </div>
+            </div>
+          {% endif %}
+</div>
+-->
+
+
+
+
+<div id="clue"></div>
+<div id="progress">Found 0 of X</div>
+<div id="next-location">Next: TBD</div>
+<div id="status"></div>
+
+<div id="clue-container"></div>
+
+<!--
+<button onclick="markLocationFound(42, {{ game.id }}, currentLat, currentLon)">
+  Mark Found
+</button>
+-->
+<button id="found-btn">
+  Mark Found
+</button>
+
+<button onclick="validateViaButton()">Mark via Button</button>
+
+
+<div id="sync-status" style="position: fixed; top: 10px; right: 10px; z-index: 10000; font-family: system-ui; display: flex; gap: 8px; align-items: center;">
+  <div id="pending-badge" style="background:#f59e0b; color:#fff; padding:4px 8px; border-radius:12px; font-size:12px; display:none;">
+    ⏳ <span id="pending-count">0</span> pending
+  </div>
+</div>
+<!-- Toast container -->
+<div id="sync-toast-container" style="position: fixed; bottom: 20px; right: 20px; max-width: 300px; display: flex; flex-direction: column; gap: 8px; z-index:10001;"></div>
+
+
+<!-- Geolocation Verify-->
+{% if enable_geolocation %}
+<button onclick="validateViaGeolocation()">Use Location</button>
+
+{% endif %}
+
+<!-- Image Verify-->
+{% if enable_image_verify %}
+<button onclick="tryImageMatch()">Match Image</button>
+<div>
+  <h1>Find the Clue</h1>
+    <div id="container">
+        <video id="camera" autoplay playsinline></video>
+        <img class="overlay" src="/static/target.png" />
+    </div>
+    <br>
+    <button id="capture-btn">Verify</button>
+    <div id="status"></div>
+</div>
+{% endif %}
+
+<!--QR scanner -->   
+{% if enable_qr_scanner %}
+<button onclick="scanQRCode()">Scan QR Code</button>
+<div id="qr-container">
+    <video id="qr-video" style="width: 100%; max-width: 400px;"></video>
+    <canvas id="qr-canvas" style="display: none;"></canvas>
+    <p id="qr-result">Awaiting scan...</p>
+</div>
+{% endif %}
+
+<!--Selfie -->   
+{% if enable_selfie %}
+    <button onclick="captureSelfie()">Take Selfie</button>
+{% endif %}
+
+
+<!-- indexedDB helper-->
+<script src="https://cdn.jsdelivr.net/npm/idb@7/build/iife/index-min.js"></script>
+<!-- Leaflet JS (must be before your custom script!) -->
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<!--
+<script src="{{ url_for('static', filename='libs/jsQR.js') }}"></script>
+-->
+
+<!-- custom -->
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script type="module">
+    import { initQRScannerIfPresent } from "{{ url_for('static', filename='js/qr.js') }}";
+    initQRScannerIfPresent();
+</script>
+
+<script>
+  //const defaultPosMode = getCookie('default_pos_mode') === '1';
+  const watchPosition = getCookie('watch_position') === '1';
+  const defaultPosMode = getCookie('default_pos_mode') === '1';
+  window.watchPosition=watchPosition;
+  window.defaultPosMode=defaultPosMode;
+
+  const GAME_DATA = {
+    gameId: {{ game.id }},
+    teamId: {{ team.id }},
+    locations: {{ locations|tojson }},
+    nextIndex: {{ next_index }}
+  };
+  window.GAME_DATA=GAME_DATA;
+
+  const locationImageUrls = GAME_DATA.locations.map(l => l.image_url).filter(Boolean);
+  window.locationImageUrls = locationImageUrls;
+
+  const bounds = [
+    {{game.min_lat}},
+    {{game.min_lon}},
+    {{game.max_lat}},
+    {{game.max_lon}}
+  ];
+  window.bounds = bounds;
+  
+</script>
+<script src="/static/js/offline-db.js"></script>
+<script src="/static/js/offline-game.js"></script>
+<script src="/static/js/prefetch.js"></script>
+<script src="/static/js/clue-manager.js"></script>
+<script src="/static/js/map.js"></script>
+
+
+<script>
+  // PREFETCH LOGIC
+  const btn = document.getElementById('prefetch-btn');
+  const offlineText = document.getElementById('offline-text');
+
+  function updateOnlineStatus() {
+    if (navigator.onLine) {
+      btn.style.display = 'inline-block';
+      offlineText.style.display = 'none';
+    } else {
+      btn.style.display = 'none';
+      offlineText.style.display = 'inline';
+    }
+  }
+
+  updateOnlineStatus();
+  setInterval(updateOnlineStatus, 2000);
+
+  btn.addEventListener('click', async() => {
+    // Replace this with your actual prefetch function
+    alert('Starting prefetch...');
+    // Prefetch tiles for multiple zoom levels
+    await prefetchTiles(bounds,[14,15,16]);
+    // Prefetch location images
+    await prefetchAssets(locationImageUrls);
+    // Prefetch API data for offline use
+    await prefetchAPIs(['/api/game-data/{{ game.id }}']);
+    console.log('All game assets downloaded for offline use!')
+  });
+</script>
+
+<script>
+import { offlineDB } from './db/offline-db.js';
+import { syncAllQueuedUpdates } from './offline-sync.js';
+
+window.addEventListener('online', () => {
+  syncAllQueuedUpdates({ offlineDB }).then((count) => {
+    if (count > 0) console.log(`Synced ${count} offline update${count > 1 ? 's' : ''}.`);
+  }).catch(console.error);
+});
+</script>
+
+<script>
+// async function saveProgress(locationId) {
+//   const payload = { locationId: locationId, status: 'found' };
+//   const update = {
+//     url: '/api/team/123/progress',
+//     method: 'POST',
+//     body: payload,
+//     timestamp: Date.now()
+//   };
+
+//   if (navigator.onLine) {
+//     try {
+//       await fetch(update.url, {
+//         method: update.method,
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(update.body)
+//       });
+//       console.log('Progress saved online');
+//     } catch (err) {
+//       console.warn('Online save failed, queueing:', err);
+//       await offlineDB.addUpdate(update);
+//     }
+//   } else {
+//     console.log('Offline, saving update locally');
+//     await offlineDB.addUpdate(update);
+//   }
+// }
+
+window.addEventListener('online', async () => {
+  console.log('Back online, syncing updates...');
+  const updates = await offlineDB.getAllUpdates();
+
+  for (const update of updates) {
+    try {
+      const response = await fetch(update.url, {
+        method: update.method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update.body)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        applyGameUpdate(data); // UI refresh
+        await offlineDB.deleteUpdate(update.id);
+      } else {
+        console.error('Failed to sync update:', update);
+      }
+    } catch (err) {
+      console.error('Sync error, will retry later:', update);
+    }
+  }
+});
+
+// function applyGameUpdate(data) {
+//   if (!data || !data.team_progress) return;
+
+//   // Example: update progress bar
+//   document.querySelector('#progress').textContent =
+//     `Found ${data.team_progress.found} of ${data.team_progress.total}`;
+
+//   // Example: show next location if available
+//   if (data.next_location) {
+//     const next = data.next_location;
+//     document.querySelector('#next-location').textContent =
+//       `Next: ${next.name} (${next.lat.toFixed(5)}, ${next.lon.toFixed(5)})`;
+//   }
+// }
+
+// function applyOfflineUI(locationId) {
+//   // Gray out the current location marker or text
+//   const el = document.querySelector(`[data-location-id="${locationId}"]`);
+//   if (el) el.classList.add('found-offline');
+
+//   // Optional: show "Will sync later" message
+//   const statusEl = document.querySelector('#status');
+//   if (statusEl) statusEl.textContent = 'Progress saved offline';
+// }
+</script>
+
+<script type="module">
+  import {
+    validateByButton,
+    validateByQR,
+    validateByImage,
+    validateByGeo,
+    validateBySelfie,
+  } from './geo-validation.js';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.btn-validate-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const clueId = btn.dataset.clueId;
+        validateByButton(clueId);
+      });
+    });
+
+    // --- individual methods wired to buttons ---
+  document.getElementById('btn-direct').addEventListener('click', () => {
+    const locationId = document.getElementById('location-id').value;
+    const gameId = document.getElementById('game-id').value;
+    const result = { passed: true, mode: 'direct', locationId, metadata: {}, needsValidation: false };
+    attemptFindLocation(result, gameId);
+  });
+
+    document.querySelectorAll('.btn-validate-geo').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const clueId = btn.dataset.clueId;
+        navigator.geolocation.getCurrentPosition(
+          pos => validateByGeo(clueId, pos),
+          err => console.error('Geo error', err)
+        );
+      });
+    });
+
+    document.getElementById('btn-geo').addEventListener('click', async () => {
+      const locationId = document.getElementById('location-id').value;
+      const gameId = document.getElementById('game-id').value;
+      try {
+        const { lat: userLat, lon: userLon } = await getCurrentGeo();
+        // placeholder target coordinates; replace with real clue coords
+        const targetLat = userLat + 0.0001;
+        const targetLon = userLon + 0.0001;
+        const distance = haversine(userLat, userLon, targetLat, targetLon);
+        const threshold = 30; // meters
+        if (distance <= threshold) {
+          attemptFindLocation({ passed: true, mode: 'geo', locationId, metadata: { distance }, needsValidation: false }, gameId);
+        } else {
+          attemptFindLocation({ passed: false, mode: 'geo', locationId, reason: `Too far (${distance.toFixed(1)}m)` }, gameId);
+        }
+      } catch (err) {
+        showToast('Geolocation failed: ' + err, { type: 'error' });
+      }
+    });
+
+    // Repeat for QR, Image, Selfie if implemented
+    // QR: You’ll need to integrate a scanner and pass the result
+    document.getElementById('btn-qr').addEventListener('click', () => {
+      const locationId = document.getElementById('location-id').value;
+      const gameId = document.getElementById('game-id').value;
+      const scanned = prompt('Simulate QR scan: enter code');
+      const expected = locationId; // example expectation
+      if (validateQr(scanned, expected)) {
+        attemptFindLocation({ passed: true, mode: 'qr', locationId, metadata: { scanned }, needsValidation: false }, gameId);
+      } else {
+        attemptFindLocation({ passed: false, mode: 'qr', locationId, reason: 'QR mismatch' }, gameId);
+      }
+    });
+    // Selfie: Hook into a file input or webcam capture
+    document.getElementById('btn-image').addEventListener('click', () => {
+      const locationId = document.getElementById('location-id').value;
+      const gameId = document.getElementById('game-id').value;
+      const score = imageMatchScore();
+      const threshold = 0.7;
+      if (score >= threshold) {
+        attemptFindLocation({ passed: true, mode: 'image', locationId, metadata: { matchScore: score }, needsValidation: false }, gameId);
+      } else {
+        attemptFindLocation({ passed: false, mode: 'image', locationId, reason: `Score ${score.toFixed(2)} < ${threshold}` }, gameId);
+      }
+    });
+
+    document.getElementById('btn-selfie').addEventListener('click', async () => {
+      const locationId = document.getElementById('location-id').value;
+      const gameId = document.getElementById('game-id').value;
+      try {
+        const blob = await captureSelfieBlob();
+        // In real app you’d upload the blob or store reference; here we inline metadata
+        attemptFindLocation({ passed: true, mode: 'selfie', locationId, metadata: { selfieSize: blob.size }, needsValidation: true }, gameId);
+      } catch (err) {
+        showToast('Selfie capture failed: ' + err.message, { type: 'error' });
+      }
+    });
+    });
+</script>
+
+
+<script>
+async function startApp() {
+  try {
+    await initGeo();   // Set up geolocation and tracking
+    await initGame();  // Load game and map elements
+
+    // Update pending sync badge right away
+    updatePendingBadge();
+
+    // Optional: Show toast if offline updates exist
+    const count = await offlineDB.count();
+    if (count > 0) {
+      showToast(`You have ${count} pending update${count === 1 ? '' : 's'}`, { type: 'warning' });
+    }
+
+    // Optionally trigger a sync attempt if online
+    if (navigator.onLine) {
+      await syncAllQueuedUpdates();
+    }
+
+  } catch (err) {
+    showToast("Failed to initialize app", { type: 'error' });
+    console.error('startApp failed:', err);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', startApp);
+</script>
+
+
+{% endblock %}
+
+

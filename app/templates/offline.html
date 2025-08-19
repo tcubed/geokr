@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Offline - Geo App{% endblock %}
+
+{% block content %}
+<div class="container text-center mt-5">
+  <h1 class="display-4">You are offline</h1>
+  <p class="lead">Sorry, the application is not available without an internet connection.</p>
+  <p>Please check your connection and try again.</p>
+  <button class="btn btn-primary" onclick="window.location.reload();">Retry</button>
+</div>
+{% endblock %}

@@ -4,8 +4,11 @@
 Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 {% endblock %}
 
-{% block content %}
-  <style>
+{% block head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
     /*
   html, body {
     height: 100%;
@@ -46,6 +49,10 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     z-index: 2;
   }
 </style>
+{% endblock %}
+
+{% block content %}
+  
 
 <div id="main-flex">
   <div id="top-content">
@@ -73,11 +80,68 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 </div>
 
   
+<div id="prefetch-container">
+  <button id="prefetch-btn" style="display:none;">Pre-fetch Maps</button>
+  <span id="offline-text" style="display:none; font-weight: bold; color: red;">Offline</span>
+</div>
+
+<!-- External JS -->
+<!-- LEAFLET GLOBAL VARIABLE IS "L"-->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script>
+    // Pass bounds from Flask to JS
+    const min_lat = {{ game.min_lat or 'null' }};
+    const max_lat = {{ game.max_lat or 'null' }};
+    const min_lng = {{ game.min_lon or 'null' }};
+    const max_lng = {{ game.max_lon or 'null' }};
+    const zooms = "14,15,16";  // Or pass from Flask if dynamic
+  </script>
+<script>
+  const defaultPosMode = getCookie('default_pos_mode') === '1';
+  console.log('Default position mode:', defaultPosMode);
+if (!defaultPosMode && navigator.geolocation) {
+  console.log('get current position');
+  navigator.geolocation.getCurrentPosition(pos => {
+    showMap(pos.coords.latitude, pos.coords.longitude);
+  });
+}
+else {
+  console.log('show map with default position');
+  var lat=(min_lat + max_lat) / 2;
+  var lon=(min_lng + max_lng) / 2;
+  showMap(lat,lon);
+}
+</script>
+
+<script>
+  const btn = document.getElementById('prefetch-btn');
+  const offlineText = document.getElementById('offline-text');
+
+  function updateOnlineStatus() {
+    if (navigator.onLine) {
+      btn.style.display = 'inline-block';
+      offlineText.style.display = 'none';
+    } else {
+      btn.style.display = 'none';
+      offlineText.style.display = 'inline';
+    }
+  }
+
+  updateOnlineStatus();
+  setInterval(updateOnlineStatus, 2000);
+
+  btn.addEventListener('click', () => {
+    // Replace this with your actual prefetch function
+    alert('Starting map prefetch...');
+    prefetchTiles();
+  });
+</script>
 
 
-
-
-  <script>
+<!-- THIS SHOULD BE GOING AWAY/CHANGED TO SYNC LATER WHEN ONLINE-->
+<script>
   async function updateProgress() {
     //const teamId = localStorage.getItem('team_id');
     //if (!teamId) return;
@@ -86,441 +150,6 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     const data = await res.json();
     document.getElementById('progress').textContent = `Clues found: ${data.clues_found.length}`;
   }
-  </script>
+</script>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-
-  <script>
-    let map, marker;
-    let latestPosition = null;
-    let clueMarkers = [];
-    let currentZoom = parseInt(localStorage.getItem('mapZoom')) || 19; // default zoom
-    let lastDebugAlertTime = 0; // Track last alert time (in ms)
-
-    const distanceThreshold = 5; // meters
-
-    const redIcon = L.icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        shadowSize: [41, 41]
-      });
-
-    // async function loadGames() {
-    //   const res = await fetch('/admin/api/games');
-    //   const games = await res.json();
-    //   const select = document.getElementById('gameSelect');
-    //   games.forEach(g => {
-    //     const option = document.createElement('option');
-    //     option.value = g.id;
-    //     option.textContent = g.name;
-    //     select.appendChild(option);
-    //   });
-    //   //alert("Games loaded: " + games.length); 
-    // }
-    
-    function getCookie(name) {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop().split(';').shift();
-    }
-    const debugMode = getCookie('debug_mode') === '1';
-    const watchPosition = getCookie('watch_position') === '1';
-    const defaultPosMode = getCookie('default_pos_mode') === '1';
-
-    let watchId = null;
-    const gameId = {{ game.id }};
-
-    function startTracking() {
-      if (defaultPosMode) return; // <-- Prevent tracking in default position mode
-
-      if (watchPosition && watchId === null && navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
-          getCluesFromPosition,
-          err => alert("Geolocation error: " + err.message),
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-        );
-      }
-    }
-
-    function stopTracking() {
-      if (watchId !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
-    }
-
-    async function getCluesFromPosition(position) {
-      const lat = position.coords.latitude;
-      const lon = position.coords.longitude;
-      const accuracy = position.coords.accuracy;
-      latestPosition = position; // Store the latest position
-
-      const posTime = new Date(position.timestamp);
-      const now = new Date();
-      const diff = Math.round((now - posTime) / 1000);
-
-      // Only show alert if at least 30 seconds have passed since last alert
-      const nowMs = Date.now();
-      if (debugMode && (nowMs - lastDebugAlertTime > 30000)) {
-        alert(
-          `Position timestamp: ${posTime}\n` +
-          `Age: ${diff}s old\n` +
-          `Pos: (${lat.toFixed(3)}, ${lon.toFixed(3)})\n` +
-          `Accuracy: ${accuracy.toFixed(1)}m`
-        );
-        lastDebugAlertTime = nowMs;
-      }
-
-  
-
-      // ...rest of your getClues logic here...
-      // (fetch clues, update markers, etc.)
-    
-      // Show map and marker
-      showMap(lat, lon);
-
-      console.log(lat, lon,"Accuracy:", accuracy,"meters")
-      //alert("Latitude: " + lat + "\nLongitude: " + lon + "\nAccuracy: " + accuracy + " meters");
-
-
-      const response = await fetch('/api/locations', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          latitude: lat,
-          longitude: lon,
-          game_id: gameId
-        })
-      });
-      const clues = await response.json();
-
-      /*
-      const list = document.getElementById('clue-list');
-      list.innerHTML = '';
-      clues.forEach(clue => {
-        const item = document.createElement('li');
-        item.textContent = `${clue.name}: ${clue.clue}`;
-        list.appendChild(item);
-      });
-      console.log(clues, "Clue List");
-      */
-
-      // Remove old clue markers
-      clueMarkers.forEach(m => map.removeLayer(m));
-      clueMarkers = [];
-
-      // Add pins for each clue (if location info is available)
-      clues.forEach(clue => {
-        if (clue.latitude && clue.longitude) {
-          // Calculate distance from user to clue
-          const distance = haversine(lat, lon, clue.latitude, clue.longitude);
-
-          const clueMarker = L.marker([clue.latitude, clue.longitude],
-                    { icon: redIcon,
-                      zIndexOffset:1000  // Ensure clue markers are above user marker
-                    }).addTo(map);
-
-          if (distance <= distanceThreshold) {
-            //clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
-            //clueMarker.on('click', function(e) {
-            //  window.location = `/location/${clue.id}`;
-            //});
-            // Check if this location has been visited before
-            let visited = JSON.parse(localStorage.getItem('visited_locations') || '[]');
-            if (!visited.includes(clue.id)) {
-              // Mark as visited
-              visited.push(clue.id);
-              localStorage.setItem('visited_locations', JSON.stringify(visited));
-              // Redirect automatically
-              window.location = `/location/${clue.id}`;
-            } else {
-              // Already visited, just show popup and allow manual click
-              clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
-              clueMarker.on('click', function(e) {
-                window.location = `/location/${clue.id}`;
-              });
-            }
-          } else {
-            clueMarker.bindPopup(`${clue.name}: Get closer to unlock this clue!`);
-            clueMarker.on('click', function(e) {
-              this.openPopup();
-            });
-          }
-          clueMarkers.push(clueMarker);
-        }
-      });
-      console.log(clueMarkers, "Clue Markers");
-
-
-    }
-
-    async function getClues() {
-      const gameId = {{ game.id }};
-      if (!gameId) {
-        alert('No game selected.');
-        return;
-      }
-
-      if (defaultPosMode) {
-        // Fetch clues as usual, but use the first clue's location
-        const response = await fetch('/api/locations', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            game_id: gameId
-          })
-        });
-        const clues = await response.json();
-        if (clues.length > 0) {
-          const clue = clues[0];
-          const lat = clue.latitude;
-          const lon = clue.longitude;
-          showMap(lat, lon);
-
-          // Remove old clue markers
-          clueMarkers.forEach(m => map.removeLayer(m));
-          clueMarkers = [];
-
-          clues.forEach(clue => {
-            if (clue.latitude && clue.longitude) {
-              const clueMarker = L.marker([clue.latitude, clue.longitude], { icon: redIcon, zIndexOffset: 1000 }).addTo(map);
-              clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
-              clueMarker.on('click', function(e) {
-                window.location = `/location/${clue.id}`;
-              });
-              clueMarkers.push(clueMarker);
-            }
-          });
-        }
-        return;
-      }
-
-
-      if (!navigator.geolocation) {
-        alert("Geolocation not supported.");
-        return;
-      }
-
-      if (watchPosition) {
-        if (watchId !== null) {
-          navigator.geolocation.clearWatch(watchId);
-        }
-        watchId = navigator.geolocation.watchPosition(
-          getCluesFromPosition,
-          err => alert("Geolocation error: " + err.message),
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-        );
-      } else {
-        navigator.geolocation.getCurrentPosition(
-          getCluesFromPosition,
-          err => alert("Geolocation error: " + err.message),
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-        );
-      }
-    }
-
-
-
-    async function getClues_LEGACY() {
-      //const gameId = document.getElementById('gameSelect').value;
-      const gameId = {{ game.id }};
-      if (!gameId) {
-        alert('No game selected.');
-        return;
-      }
-  
-      if (!navigator.geolocation) {
-        alert("Geolocation not supported.");
-        return;
-      }
-
-      /*
-      console.log("Requesting geolocation, pre-lim...");
-      navigator.geolocation.getCurrentPosition(
-          pos => alert("Lat: " + pos.coords.latitude + ", Lon: " + pos.coords.longitude),
-          err => alert("Geo error: " + err.message)
-        );
-      */
-      console.log("Requesting geolocation...");
-      navigator.geolocation.getCurrentPosition(async position => {
-        //alert("GOT LOCATION");
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        const accuracy = position.coords.accuracy;
-
-        const posTime = new Date(position.timestamp);
-        const now = new Date();
-        const diff = Math.round((now - posTime) / 1000);
-        
-        if (debugMode) {
-        alert(`Position timestamp: ${posTime}\n`+
-              `Age: ${diff}s old\n`+
-              `Pos: (${lat.toFixed(3)}, ${lon.toFixed(3)})\n`+
-              `Accuracy: ${accuracy.toFixed(1)}m`);
-        }
-        //console.log(`Seconds old: ${diff}s`);
-
-
-        // Show map and marker
-        showMap(lat, lon);
-
-        console.log(lat, lon,"Accuracy:", accuracy,"meters")
-        //alert("Latitude: " + lat + "\nLongitude: " + lon + "\nAccuracy: " + accuracy + " meters");
-
-
-        const response = await fetch('/api/locations', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            latitude: lat,
-            longitude: lon,
-            game_id: gameId
-          })
-        });
-        const clues = await response.json();
-
-        /*
-        const list = document.getElementById('clue-list');
-        list.innerHTML = '';
-        clues.forEach(clue => {
-          const item = document.createElement('li');
-          item.textContent = `${clue.name}: ${clue.clue}`;
-          list.appendChild(item);
-        });
-        console.log(clues, "Clue List");
-        */
-
-        // Remove old clue markers
-        clueMarkers.forEach(m => map.removeLayer(m));
-        clueMarkers = [];
-
-        // Add pins for each clue (if location info is available)
-        clues.forEach(clue => {
-          if (clue.latitude && clue.longitude) {
-            // Calculate distance from user to clue
-            const distance = haversine(lat, lon, clue.latitude, clue.longitude);
-
-            const clueMarker = L.marker([clue.latitude, clue.longitude], { icon: redIcon }).addTo(map);
-
-            if (distance <= distanceThreshold) {
-              clueMarker.bindPopup(`${clue.name}: ${clue.clue}`);
-            } else {
-              clueMarker.bindPopup(`${clue.name}: Get closer to unlock this clue!`);
-              clueMarker.on('click', function(e) {
-                this.openPopup();
-              });
-            }
-            clueMarkers.push(clueMarker);
-          }
-        });
-        console.log(clueMarkers, "Clue Markers");
-
-      }, err => {
-        alert("Geolocation error: " + err.message);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 20000
-      });
-    }
-    
-    // Haversine function (same as your backend, but in JS)
-    function haversine(lat1, lon1, lat2, lon2) {
-      function toRad(x) { return x * Math.PI / 180; }
-      const R = 6371000; // meters
-      const dLat = toRad(lat2 - lat1);
-      const dLon = toRad(lon2 - lon1);
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    }
-
-    function showMap(lat, lon) {
-      if (!map) {
-        map = L.map('map').setView([lat, lon], currentZoom);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        marker = L.marker([lat, lon],
-          {zIndexOffset:0}
-        ).addTo(map)
-          .bindPopup('You are here').openPopup();
-
-        // Listen for zoom changes
-        map.on('zoomend', function() {
-          currentZoom = map.getZoom();
-          localStorage.setItem('mapZoom', currentZoom); // Save zoom to localStorage
-        });
-      } else {
-        map.setView([lat, lon], currentZoom);
-        //marker.setLatLng([lat, lon]);
-        if (marker) {
-          marker.setLatLng([lat, lon]);
-        } else {
-          marker = L.marker([lat, lon],
-            {zIndexOffset:0}
-          ).addTo(map)
-            .bindPopup('You are here').openPopup();
-        }
-      }
-    }
-
-    function sendToNewPin() {
-      if (latestPosition) {
-        const lat = latestPosition.coords.latitude;
-        const lon = latestPosition.coords.longitude;
-        window.location = `/new_pin?lat=${lat}&lon=${lon}`;
-      } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          window.location = `/new_pin?lat=${lat}&lon=${lon}`;
-        }, function(err) {
-          alert("Geolocation error: " + err.message);
-        }, {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 20000
-        });
-      } else {
-        alert("Geolocation not supported.");
-      }
-    }
-
-    // Optionally, show map on page load if geolocation is available
-    // Only show map on page load using geolocation if default_pos_mode is NOT enabled
-    if (!defaultPosMode && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(pos => {
-        showMap(pos.coords.latitude, pos.coords.longitude);
-      });
-    }
-
-    // Listen for page visibility changes
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        stopTracking();
-      } else {
-        startTracking();
-      }
-    });
-
-    // Optionally, start tracking immediately if watchPosition is enabled and page is visible
-    if (watchPosition && !defaultPosMode && !document.hidden) {
-      startTracking();
-    }
-    //loadGames();
-    // Automatically check for clues on first page load
-    getClues();
-
-  </script>
 {% endblock %}

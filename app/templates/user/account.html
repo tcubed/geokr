@@ -13,10 +13,11 @@
       <label for="email" class="form-label">Email</label>
       <input type="email" class="form-control" id="email" name="email" value="{{ user.email or '' }}">
     </div>
-    
+    {#
     <div class="mb-3">
       <label for="picture" class="form-label">Profile Picture</label>
       <input type="file" class="form-control" id="picture" name="picture" accept="image/*">
+      
       
       {% if user.picture_url %}
         <div class="mt-2">
@@ -26,7 +27,10 @@
         </div>
       {% endif %}
       
+      
     </div>
+    #}
+
 
     <h3>Switch Game</h3>
     <div class="mb-3">

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Offline Map Prefetch Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 400px; margin-top: 10px; }
+    button { padding: 10px 15px; margin: 5px; }
+    #status { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Offline Map & Data Prefetch Demo</h1>
+
+  
+  <div>
+    <button id="prefetch-btn">Prefetch Tiles + Data</button>
+    <button onclick="showMap(43.076, -89.4)">Show Map</button>
+  </div>
+  <div id="status">Status: Ready</div>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Prefetch Module -->
+  <script src="{{ url_for('static', filename='js/prefetch.js') }}"></script>
+
+  <script>
+    let map, marker;
+    const currentZoom = 15;
+    const gameId = 123; // Example game ID
+
+    // Prefetch button handler
+    document.getElementById('prefetch-btn').addEventListener('click', () => {
+      document.getElementById('status').innerText = 'Prefetching...';
+
+      const bounds = [43.074, -89.39, 43.078, -89.385]; // minLat, minLng, maxLat, maxLng
+      const zoomLevels = [14, 15, 16];
+
+      Promise.all([
+        prefetchTiles(bounds, zoomLevels),
+        prefetchAssets([
+          '/static/images/icon.png',
+          '/static/images/offline-tile.png'
+        ]),
+        prefetchAPIs([
+          `/api/game/${gameId}/clues`,
+          `/api/game/${gameId}/status`
+        ])
+      ]).then(() => {
+        document.getElementById('status').innerText = 'Prefetch complete. You can go offline now.';
+      }).catch(err => {
+        document.getElementById('status').innerText = 'Error during prefetch: ' + err;
+      });
+    });
+
+    // Show Leaflet map
+    function showMap(lat, lon) {
+      if (!map) {
+        map = L.map('map').setView([lat, lon], currentZoom);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        marker = L.marker([lat, lon], { zIndexOffset: 0 }).addTo(map).bindPopup('You are here').openPopup();
+      } else {
+        map.setView([lat, lon], currentZoom);
+        if (marker) {
+          marker.setLatLng([lat, lon]);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

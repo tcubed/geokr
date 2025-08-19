@@ -25,6 +25,11 @@ class Game(db.Model):
 
     data = db.Column(JSON, nullable=True)           # flexible JSON blob
 
+    min_lat = db.Column(db.Float, nullable=True)
+    max_lat = db.Column(db.Float, nullable=True)
+    min_lon = db.Column(db.Float, nullable=True)
+    max_lon = db.Column(db.Float, nullable=True)
+
     # relationships
     gametype = db.relationship('GameType', back_populates='games')
     locations = db.relationship('Location', back_populates='game', lazy=True)
@@ -34,6 +39,28 @@ class Game(db.Model):
 
     def __str__(self):
         return self.name
+
+    def update_bounds_from_locations(self):
+        if not self.locations:
+            self.min_lat = None
+            self.max_lat = None
+            self.min_lon = None
+            self.max_lon = None
+            return
+
+        lats = [loc.latitude for loc in self.locations if loc.latitude is not None]
+        lons = [loc.longitude for loc in self.locations if loc.longitude is not None]
+
+        if lats and lons:
+            self.min_lat = min(lats)
+            self.max_lat = max(lats)
+            self.min_lon = min(lons)
+            self.max_lon = max(lons)
+        else:
+            self.min_lat = None
+            self.max_lat = None
+            self.min_lon = None
+            self.max_lon = None
 
 class GameType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -53,6 +80,7 @@ class Location(db.Model):
     clue_text = db.Column(db.Text)
     unlock_condition = db.Column(db.String, nullable=True)
     image_url = db.Column(db.String(300), nullable=True) 
+    show_pin = db.Column(db.Boolean, nullable=True, default=None)
 
     game = db.relationship('Game', back_populates='locations')  # <-- Add this line
     team_assignments = db.relationship('TeamLocationAssignment', back_populates='location', cascade='all, delete-orphan')

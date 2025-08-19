@@ -1,4 +1,8 @@
-from flask_admin import Admin
+from datetime import datetime
+
+from flask_login import current_user
+from flask import redirect, url_for, request
+from flask_admin import Admin, expose
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.form import Select2Widget
 from wtforms_sqlalchemy.fields import QuerySelectField
@@ -7,18 +11,23 @@ from app.models import (db,
                         Game, GameType,Location, Character,
                         Team, TeamMembership, TeamLocationAssignment)
                          
-                        
+class AdminModelView(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated and current_user.is_admin
 
+    def inaccessible_callback(self, name, **kwargs):
+        # Redirect to login page or home if user lacks access
+        return redirect(url_for('main.index', next=request.url))
 
 # =======================================================
 # USER ADMINISTRATION
 # =======================================================
 
-class RoleAdmin(ModelView):
+class RoleAdmin(AdminModelView):
     column_list = ('id', 'name', 'description')
     form_columns = ('name', 'description')
 
-class UserRoleAdmin(ModelView):
+class UserRoleAdmin(AdminModelView):
     column_list = ('id', 'user', 'role')
     form_columns = ('user', 'role')
     form_overrides = dict(
@@ -43,22 +52,51 @@ class UserRoleAdmin(ModelView):
 # =======================================================
 # TEAM ADMINISTRATION
 # =======================================================
-class TeamAdmin(ModelView):
-    column_list = ('id', 'game','name')
-    form_columns = ('game','name')
-    # form_overrides = dict(
-    #     game=QuerySelectField
-    # )
-    # form_args = dict(
-    #     game=dict(
-    #         query_factory=lambda: Game.query.all(),
-    #         get_label='name',
-    #         allow_blank=False,
-    #         widget=Select2Widget()
-    #     )
-    # )
+class TeamAdmin(AdminModelView):
+    column_list = (
+        'id', 
+        'game', 
+        'name', 
+        'start_time', 
+        'end_time', 
+        'completion_time', 
+        'discoverable', 
+        'num_members'
+    )
 
-class TeamMembershipAdmin(ModelView):
+    column_labels = {
+        'game': 'Game',
+        'name': 'Team Name',
+        'start_time': 'Start Time',
+        'end_time': 'End Time',
+        'completion_time': 'Elapsed',
+        'discoverable': 'discoverable',
+        'num_members': 'Members'
+    }
+
+    column_formatters = {
+        'completion_time': lambda v, c, m, p: (
+            str(m.end_time - m.start_time) if m.start_time and m.end_time else ''
+        ),
+        'num_members': lambda v, c, m, p: len(m.memberships)
+    }
+
+    form_columns = (
+        'game', 
+        'name', 
+        'start_time', 
+        'end_time', 
+        'discoverable', 
+        'memberships'
+    )
+
+    # form_widget_args = {
+    #     'start_time': {'readonly': True},
+    #     'end_time': {'readonly': True},
+    # }
+
+
+class TeamMembershipAdmin(AdminModelView):
     column_list = ('id', 'user','team', 'role')
     form_columns = ('user','team', 'role')
     form_overrides = dict(
@@ -80,7 +118,7 @@ class TeamMembershipAdmin(ModelView):
         )
     )
 
-class TeamLocationAssignmentAdmin(ModelView):
+class TeamLocationAssignmentAdmin(AdminModelView):
     column_list = ('id', 'team', 'location', 'game', 'found', 'timestamp_found')
     form_columns = ('team', 'location', 'game', 'found', 'timestamp_found')
 
@@ -105,12 +143,27 @@ class TeamLocationAssignmentAdmin(ModelView):
         }
     }
 
+    def on_model_delete(self, model):
+        """
+        Called whenever a TeamLocationAssignment is deleted from the admin panel.
+        """
+        from app.main.cache import deleted_tombstones, cleanup_tombstones
+
+        cleanup_tombstones()  # remove old entries
+
+        key = (model.team_id, model.location_id, model.game_id)
+        deleted_tombstones[key] = datetime.utcnow()
+
 # =======================================================
 # GAME ADMINISTRATION
 # =======================================================
-class GameAdmin(ModelView):
-    column_list = ('id', 'name', 'gametype', 'discoverable','mode', 'start_time',)
-    form_columns = ('name', 'description','gametype', 'discoverable', 'mode', 'join_deadline','start_time','data')
+class GameAdmin(AdminModelView):
+    column_list = ('id', 'name', 'gametype', 'discoverable','mode',
+                   #'minlat','maxlat','minlon','maxlon',
+                   'start_time',)
+    form_columns = ('name', 'description','gametype', 'discoverable', 'mode', 
+                    'min_lat','max_lat','min_lon','max_lon',
+                    'join_deadline','start_time','data')
 
     # Display gametype.name instead of the object
     column_labels = {
@@ -124,13 +177,15 @@ class GameAdmin(ModelView):
         }
     }
 
-class GameTypeAdmin(ModelView):
+class GameTypeAdmin(AdminModelView):
     column_list = ('id', 'name')
     form_columns = ('name',)
 
-class LocationAdmin(ModelView):
-    column_list = ('id', 'name', 'game_id', 'latitude', 'longitude', 'image_url','clue_text', 'unlock_condition')
-    form_columns = ('name', 'game', 'latitude', 'longitude', 'image_url','clue_text', 'unlock_condition')
+class LocationAdmin(AdminModelView):
+    column_list = ('id', 'name', 'game_id', 
+                   #'latitude', 'longitude',
+                   'image_url','clue_text', 'show_pin','unlock_condition')
+    form_columns = ('name', 'game', 'latitude', 'longitude', 'image_url','clue_text', 'show_pin','unlock_condition')
 
     form_overrides = dict(game=QuerySelectField)
     form_args = dict(
@@ -142,7 +197,7 @@ class LocationAdmin(ModelView):
         )
     )
 
-class CharacterAdmin(ModelView):
+class CharacterAdmin(AdminModelView):
     column_list = ('id', 'name', 'game', 'location', 'bio', 'dialogue')
     form_columns = ('name', 'game', 'location', 'bio', 'dialogue')
     form_overrides = dict(
@@ -171,7 +226,7 @@ def setup_admin(app):
     #admin.add_view(ModelView(GameType, db.session))
 
     # ===========USER MANAGEMENT===========
-    admin.add_view(ModelView(User, db.session, category="User", name="Users"))
+    admin.add_view(AdminModelView(User, db.session, category="User", name="Users"))
 
     #admin.add_view(ModelView(Role, db.session))
     admin.add_view(RoleAdmin(Role, db.session, category="User", name="Roles")) 
