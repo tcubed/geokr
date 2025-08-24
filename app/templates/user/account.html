@@ -34,23 +34,21 @@
 
     <h3>Switch Game</h3>
     <div class="mb-3">
-      <ul>
-        {% for membership in current_user.team_memberships %}
-          <li class="mb-2">
-            {% if session.active_team_id != membership.team.id %}
-              <a href="{{ url_for('main.switch_team', team_id=membership.team.id) }}" class="btn btn-success btn-sm me-2">
-                Switch
-              </a>
-              {{ membership.team.name }} ({{ membership.team.game.name }})
-            {% else %}
-              <button class="btn btn-secondary btn-sm me-2" disabled>
-                <strong>Active</strong>
-              </button>
-              <strong>{{ membership.team.name }} ({{ membership.team.game.name }})</strong>
-            {% endif %}
-          </li>
-        {% endfor %}
-      </ul>
+      <ul id="team-list">
+    {% for membership in current_user.team_memberships %}
+      <li class="mb-2" data-team-id="{{ membership.team.id }}">
+        <button class="btn btn-sm me-2"
+                onclick="this.disabled=true; switchTeam({{ membership.team.id }})">
+          {% if session.active_team_id == membership.team.id %}
+            <strong>Active</strong>
+          {% else %}
+            Switch
+          {% endif %}
+        </button>
+        {{ membership.team.name }} ({{ membership.team.game.name }})
+      </li>
+    {% endfor %}
+  </ul>
 
     </div>
       

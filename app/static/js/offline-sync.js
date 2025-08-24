@@ -115,21 +115,6 @@
         if (Date.now() - update.lastTried < delay) continue;
       }
 
-      // try {
-      //   console.log(['offline-sync: update',update])
-      //   const sent = await sendOrQueue(update, { offlineDB, onSuccess, onQueued, onFailure, 
-      //     teamId: update.body?.team_id });
-      //   if (sent && update.id != null) {
-      //     await offlineDB.deleteUpdate(update.id);
-      //     //await updatePendingBadge(); // reflect removal
-      //     if (typeof root.updatePendingBadge === 'function') await root.updatePendingBadge();
-      //     successCount += 1;
-      //   }
-      //   // SMALL TWEAK: OPTIONAL CALLBACK TO INTERRUPT SYNC
-      //   if (shouldStop && shouldStop()) break;
-      // } catch (err) {
-      //   onFailure && onFailure(err, update);
-      // }
       try {
         const sent = await sendOrQueue(update, { offlineDB, onSuccess, onQueued, onFailure, teamId: update.body?.team_id });
         if (sent) successCount += 1;
@@ -251,7 +236,7 @@
       window.updatePendingBadge();
       console.log('[Badge] updatePendingBadge called after full sync');
     }
-    
+
     //updatePendingBadge();
     console.log('[offlineSync] Full sync complete');
     //console.log('[offlineSync] Full sync complete, reconciled state:', data);

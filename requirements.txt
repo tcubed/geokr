@@ -2,6 +2,8 @@ flask
 flask_sqlalchemy
 flask_admin
 flask-login
+flask-mail
 flask-migrate
 wtforms-sqlalchemy
 wtforms<3.2
+python-dotenv

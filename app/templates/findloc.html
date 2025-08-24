@@ -166,6 +166,11 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
 <button id="btn-reset-locations" class="btn btn-warning">Reset All Locations</button>
 
+
+{% endblock %}
+
+{% block scripts %}
+
 <script type="module">
 //import { clearOfflineQueue } from '/static/js/offline-sync.js';
 import { clearOfflineQueueForTeam } from '/static/js/app-init.js';
@@ -247,10 +252,14 @@ document.getElementById('btn-reset-locations').addEventListener('click', async (
 <!--
 <script type="module" src="{{ url_for('static', filename='libs/index.js') }}"></script>
 -->
+<!--
 <script type="module" src="https://unpkg.com/idb@8.0.3/build/index.js"></script>
+-->
 <!-- Leaflet JS (must be before your custom script!) -->
 
+<!--
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+-->
 <!--
 <script src="{{ url_for('static', filename='libs/leaflet.js') }}"></script>
 -->
@@ -258,12 +267,17 @@ document.getElementById('btn-reset-locations').addEventListener('click', async (
  <!--
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 -->
+<!--
 <script src="{{ url_for('static', filename='libs/jsQR.js') }}"></script>
-
+-->
 <!-- Custom JS Modules -->
-<script type="module" src="{{ url_for('static', filename='js/localStorage.js') }}"></script>
+<!--
+
 <script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
 <script src="{{ url_for('static', filename='js/offline-sync.js') }}"></script>
+-->
+<script type="module" src="{{ url_for('static', filename='js/localStorage.js') }}"></script>
+
 <script type="module" src="{{ url_for('static', filename='js/validate.js') }}"></script>
 
 

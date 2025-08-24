@@ -9,6 +9,8 @@ const savedState = localStorage.getItem(STORAGE_KEY);
 const gameState = savedState 
   ? JSON.parse(savedState)
   : {
+      gameId: GAME_DATA.gameId,
+      teamId: GAME_DATA.teamId || null,
       locations: window.GAME_DATA.locations,
       currentIndex: window.GAME_DATA.nextIndex || 0
     };

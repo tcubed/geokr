@@ -169,9 +169,6 @@ export async function submitLocationValidation(methodResult, gameId) {
     return;
   }
 
-  //const gameState = gameStorage.gameState;
-  //const saveState = gameStorage.saveState;
-
   // Advance the clue index locally (offline-first)
   if (gameState.currentIndex < gameState.locations.length - 1) {
     gameState.currentIndex++;

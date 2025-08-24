@@ -34,6 +34,7 @@
 </div>
   <script>
     // Teams by game as a JS object
+    /*
     const teamsByGame = {{ teams_by_game | tojson }};
     const teamSelect = document.getElementById('team_id');
     const gameSelect = document.getElementById('game_id');
@@ -59,5 +60,72 @@
         alert('Please select a team or enter a new team name.');
     }
     });
+    */
   </script>
+
+  <script type="module">
+import { sendOrQueue } from "/static/js/offline-sync.js";
+
+const form = document.querySelector('form');
+const teamSelect = document.getElementById('team_id');
+const newTeamInput = document.getElementById('new_team_name');
+const gameSelect = document.getElementById('game_id');
+
+// Teams by game for dynamic select updates
+const teamsByGame = {{ teams_by_game | tojson }};
+gameSelect.addEventListener('change', function() {
+  const gameId = this.value;
+  const teams = teamsByGame[gameId] || [];
+  teamSelect.innerHTML = '';
+  teams.forEach(team => {
+    const option = document.createElement('option');
+    option.value = team.id;
+    option.textContent = team.name;
+    teamSelect.appendChild(option);
+  });
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const gameId = gameSelect.value;
+  const teamId = teamSelect.value || null;
+  const newTeamName = newTeamInput.value.trim() || null;
+
+  if (!teamId && !newTeamName) {
+    alert('Please select a team or enter a new team name.');
+    return;
+  }
+
+  const payload = {
+    game_id: gameId,
+    team_id: teamId,
+    new_team_name: newTeamName
+  };
+
+  await sendOrQueue({
+    url: '/api/joingame',
+    method: 'POST',
+    body: payload,
+    timestamp: Date.now()
+  }, {
+    onSuccess: (data) => {
+      if (data.success) {
+        alert(data.message);
+        window.location.href = '/'; // redirect to main page or game page
+      } else {
+        alert(data.message || "Failed to join game.");
+      }
+    },
+    onQueued: () => {
+      alert('Offline: join/create action saved locally and will sync later.');
+    },
+    onFailure: (err) => {
+      console.error('Join game failed:', err);
+      alert('Failed to submit join/create request.');
+    }
+  });
+});
+</script>
+
 {% endblock %}

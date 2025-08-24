@@ -9,15 +9,21 @@ const API_CACHE = 'api-cache-v1';
 const OFFLINE_TILE_URL = '/static/images/offline-tile.png';
 
 const APP_SHELL_FILES = [
-  '/',
-  '/findloc',
+  //'/',         // entry point (redirects handled by app)
+  '/findloc',  // main play
+  //'/login',
+  //'/register',
+  '/offline',  // offline fallback
+
+  // core UI
+  '/static/js/login.js',
   '/static/js/prefetch.js',
   '/static/js/findloc.js',
   '/static/js/offline-game.js',
   '/static/js/offline-db.js',
   '/static/js/offline-sync.js',
   '/static/js/validate.js',
-  '/offline',
+
   //'/static/js/app.js',
   //'/static/css/style.css',
  // '/static/images/offline-tile.png',
@@ -107,7 +113,11 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
   // ---- BYPASS admin pages & other irrelevant paths ----
-  if (url.pathname.startsWith('/admin')) return;
+  // ---- BYPASS auth & admin pages ----
+  if (url.pathname.startsWith('/admin') || url.pathname === '/' || url.pathname.startsWith('/login') || 
+    url.pathname.startsWith('/register') || url.pathname.startsWith('/magic-login')) {
+    return; // let browser handle redirects/auth
+  }
 
   // Only handle GET and POST requests
   if (event.request.method === 'GET') {
@@ -128,12 +138,17 @@ self.addEventListener('fetch', event => {
       event.respondWith(
         caches.open(APP_CACHE).then(async cache => {
           const cached = await cache.match(event.request);
-          if (cached) return cached;
+          if (cached) {
+            console.log('[SW] Serving API GET from cache:', url.href);
+            return cached;
+          }
           try {
-            const response = await fetch(event.request);
+            const response = await fetch(event.request, { credentials: 'same-origin', redirect: 'follow' });
+            console.log('[SW] Fetched API GET from network:', url.href, response.status);
             cache.put(event.request, response.clone());
             return response;
-          } catch {
+          } catch (err) {
+            console.warn('[SW] API GET failed, returning cache or empty JSON:', url.href, err);
             return cached || new Response('{}', { headers: { 'Content-Type': 'application/json' } });
           }
         })
@@ -141,8 +156,71 @@ self.addEventListener('fetch', event => {
       return;
     }
 
+    // Only handle our login endpoint for POST
+    if (event.request.method === 'POST' && url.pathname === '/login') {
+      event.respondWith(
+        (async () => {
+          try {
+            // Attempt online first
+            const fetchRequest = event.request.clone();
+            const response = await fetch(fetchRequest);
+            const json = await response.clone().json();
+
+            // Optionally, store login status in IndexedDB
+            if (json.success) {
+              await offlineDB.addUpdate({ type: 'login', email: json.email, timestamp: Date.now() });
+            }
+
+            return new Response(JSON.stringify(json), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          } catch (err) {
+            console.warn('[SW] Offline login attempt:', err);
+
+            // Check IndexedDB for last known successful login
+            const lastLogin = await offlineDB.getLastLogin();
+            if (lastLogin) {
+              return new Response(JSON.stringify({
+                success: true,
+                message: 'Offline login successful',
+                email: lastLogin.email
+              }), { headers: { 'Content-Type': 'application/json' } });
+            }
+
+            return new Response(JSON.stringify({
+              success: false,
+              message: 'Offline login failed'
+            }), { headers: { 'Content-Type': 'application/json' } });
+          }
+        })()
+      );
+    }
+
     // App shell / other static assets
-    event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
+    //event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        if (cached) {
+          console.log('[SW] Serving from cache:', url.href);
+          return cached;
+        }
+        return fetch(event.request,{ credentials: 'same-origin', redirect: 'follow' })
+          .then(response => {
+            console.log('[SW] Fetched from network:', url.href, response.status);
+            // Only cache real successful responses
+            if (response && response.status === 200 && response.type === "basic") {
+              const responseClone = response.clone();
+              caches.open(APP_CACHE).then(cache => cache.put(event.request, responseClone));
+            }
+            return response;
+          })
+          .catch(err => {
+            console.warn('[SW] Fetch failed, offline fallback:', url.href, err);
+            // offline fallback page
+            return caches.match('/offline') || new Response('Offline', { status: 503 });
+          });
+      })
+    );
     return;
   }
 

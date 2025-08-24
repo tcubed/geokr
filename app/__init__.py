@@ -1,8 +1,11 @@
+import os
 from datetime import timedelta
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
+from flask_mail import Mail
+from dotenv import load_dotenv
 
 import logging
 import sys
@@ -13,25 +16,43 @@ import sys
 #     handlers=[logging.StreamHandler(sys.stdout)]
 # )
 # logger = logging.getLogger(__name__)
-
+load_dotenv()
 migrate = Migrate()
 db = SQLAlchemy()
+mail = Mail()  # create Mail instance
 
 login_manager = LoginManager()
-login_manager.login_view = 'main.login'  # or your login route
+login_manager.login_view = 'auth.login'  # or your login route
 
 def create_app():
     app = Flask(__name__)
     print(f"Template folder: {app.template_folder}")
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # or 'Strict'
+    app.config['REMEMBER_COOKIE_HTTPONLY'] = True
     app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=365)
-    app.secret_key = 'your-secret-key'  # Needed for Flask-Admin
+    app.config['SESSION_COOKIE_SECURE'] = False    # True only in HTTPS
+    app.config['REMEMBER_COOKIE_SECURE'] = False           # True in prod HTTPS
+
+    # EMAIL
+    app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+    app.config['MAIL_PORT'] = 587
+    app.config['MAIL_USE_TLS'] = True
+    app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
+    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+    app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_PASSWORD'))
+
+
+    app.secret_key = 'your-secret-ballroom'  # Needed for Flask-Admin
 
     db.init_app(app)
     migrate.init_app(app, db)
-    
     login_manager.init_app(app)
+    mail.init_app(app)
 
     @app.context_processor
     def inject_user_flags():

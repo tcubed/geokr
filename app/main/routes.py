@@ -24,6 +24,12 @@ from app.models import (db,
 from app.main import main_bp
 
 from app.main import utils
+from app.main.cache import deleted_tombstones, cleanup_tombstones
+
+
+import random
+from itertools import cycle
+
 # @main_bp.route('/debug/templates')
 # def debug_templates():
 #     template_dir = os.path.join(current_app.root_path, 'templates')
@@ -46,7 +52,6 @@ def get_active_team(user):
     return membership.team if membership else None
 
 @main_bp.route('/')
-@login_required
 def index():
     #team_id = session.get('active_team_id')
 
@@ -70,10 +75,12 @@ def index():
                 flash("Could not find valid team or game info.", "warning")
         else:
             flash("No active team selected.", "warning")
+    
+    return redirect(url_for("auth.login"))  # or render landing page template
     # Show games whose start date is no older than yesterday
-    yesterday = datetime.utcnow() - timedelta(days=1)
-    games = Game.query.filter(Game.start_time >= yesterday).all()
-    return render_template('index.html', games=games)
+    #yesterday = datetime.utcnow() - timedelta(days=1)
+    #games = Game.query.filter(Game.start_time >= yesterday).all()
+    #return render_template('index.html', games=games)
 
 #================================================================
 # MAP GAME
@@ -131,6 +138,7 @@ def debug_map():
 def map_prefetch():
     print("map_prefetch!")
     return render_template("map/map_prefetch.html")
+
 #================================================================
 # FIND LOCATION GAME
 #================================================================
@@ -239,27 +247,11 @@ def findloc():
 def offline():
     return render_template('offline.html')
 
-@main_bp.route('/joingame', methods=['GET', 'POST'])
+# GET route — renders the page with discoverable games
+@main_bp.route('/joingame', methods=['GET'])
 @login_required
-def join_game():
-    # Show games that are active
-    #yesterday = datetime.utcnow() - timedelta(days=1)
-    #games = Game.query.filter(Game.start_time >= yesterday).all()
-
-    now = datetime.utcnow()
-    # games = Game.query.filter(
-    #     or_(
-    #         Game.mode == 'open',
-    #         and_(
-    #             Game.mode == 'competitive',
-    #             or_(Game.join_deadline == None, Game.join_deadline >= now)
-    #         )
-    #     )
-    # ).all()
-
+def joingame_page():
     games = Game.query.filter_by(discoverable='public').all()
-
-
     teams_by_game = {
         game.id: [
             {"id": team.id, "name": team.name}
@@ -267,79 +259,185 @@ def join_game():
         ]
         for game in games
     }
-    if request.method == 'POST':
-        game_id = request.form.get('game_id')
-        team_id = request.form.get('team_id')
-        new_team_name = request.form.get('new_team_name')
+    return render_template('user/joingame.html', games=games, teams_by_game=teams_by_game)
 
-        # Check if user is already a member of any team in this game
-        existing_membership = (
-            db.session.query(TeamMembership)
-            .join(Team)
-            .filter(TeamMembership.user_id == current_user.id)
-            .filter(Team.game_id == game_id)
-            .first()
-        )
+# POST route — joins or creates a team (JSON response)
+@main_bp.route('/api/joingame', methods=['POST'])
+@login_required
+def api_joingame():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "Missing data"}), 400
 
-        if team_id:  # Join existing team
-            # If user is already a member of this team, redirect
-            already_on_team = (
-                TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
-            )
-            if already_on_team:
-                flash("You are already a member of this team.", "info")
-                return redirect(url_for('main.main_page'))
-            # If user is on a different team in this game, prevent joining another
-            if existing_membership:
-                flash("You are already on a team for this game.", "warning")
-                return redirect(url_for('main.main_page'))
-            # Otherwise, add membership
-            membership = TeamMembership(user_id=current_user.id, team_id=team_id)
-            session['active_team_id'] = membership.team_id
-            db.session.add(membership)
-            db.session.commit()
-            return redirect(url_for('main.main_page'))
+    game_id = data.get('game_id')
+    team_id = data.get('team_id')
+    new_team_name = data.get('new_team_name', '').strip()
+
+    if not game_id:
+        return jsonify({"success": False, "message": "Missing game_id"}), 400
+
+    # Check if user is already a member of any team in this game
+    existing_membership = (
+        db.session.query(TeamMembership)
+        .join(Team)
+        .filter(TeamMembership.user_id == current_user.id)
+        .filter(Team.game_id == game_id)
+        .first()
+    )
+
+    if team_id:  # Join existing team
+        if existing_membership:
+            return jsonify({"success": False, "message": "Already on a team in this game."}), 403
+
+        membership = TeamMembership(user_id=current_user.id, team_id=team_id)
+        db.session.add(membership)
+        db.session.commit()
+        session['active_team_id'] = membership.team_id
+        return jsonify({"success": True, "team_id": team_id, "message": "Joined team successfully."})
+
+    elif new_team_name:  # Create new team
+        if existing_membership:
+            return jsonify({"success": False, "message": "Already on a team in this game."}), 403
+
+        team = Team(name=new_team_name, game_id=game_id)
+        db.session.add(team)
+        db.session.commit()
+
+        membership = TeamMembership(user_id=current_user.id, team_id=team.id, role='captain')
+        db.session.add(membership)
+        db.session.commit()
+        session['active_team_id'] = membership.team_id
+
+        return jsonify({"success": True, "team_id": team.id, "message": "Created team and joined successfully."})
+
+    return jsonify({"success": False, "message": "Must select or create a team."}), 400
+
+# @main_bp.route('/joingame', methods=['GET', 'POST'])
+# @login_required
+# def join_game():
+#     # Show games that are active
+#     #yesterday = datetime.utcnow() - timedelta(days=1)
+#     #games = Game.query.filter(Game.start_time >= yesterday).all()
+
+#     now = datetime.utcnow()
+#     # games = Game.query.filter(
+#     #     or_(
+#     #         Game.mode == 'open',
+#     #         and_(
+#     #             Game.mode == 'competitive',
+#     #             or_(Game.join_deadline == None, Game.join_deadline >= now)
+#     #         )
+#     #     )
+#     # ).all()
+
+#     games = Game.query.filter_by(discoverable='public').all()
+
+
+#     teams_by_game = {
+#         game.id: [
+#             {"id": team.id, "name": team.name}
+#             for team in Team.query.filter_by(game_id=game.id).all()
+#         ]
+#         for game in games
+#     }
+#     if request.method == 'POST':
+#         game_id = request.form.get('game_id')
+#         team_id = request.form.get('team_id')
+#         new_team_name = request.form.get('new_team_name')
+
+#         # Check if user is already a member of any team in this game
+#         existing_membership = (
+#             db.session.query(TeamMembership)
+#             .join(Team)
+#             .filter(TeamMembership.user_id == current_user.id)
+#             .filter(Team.game_id == game_id)
+#             .first()
+#         )
+
+#         if team_id:  # Join existing team
+#             # If user is already a member of this team, redirect
+#             already_on_team = (
+#                 TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
+#             )
+#             if already_on_team:
+#                 flash("You are already a member of this team.", "info")
+#                 return redirect(url_for('main.main_page'))
+#             # If user is on a different team in this game, prevent joining another
+#             if existing_membership:
+#                 flash("You are already on a team for this game.", "warning")
+#                 return redirect(url_for('main.main_page'))
+#             # Otherwise, add membership
+#             membership = TeamMembership(user_id=current_user.id, team_id=team_id)
+#             session['active_team_id'] = membership.team_id
+#             db.session.add(membership)
+#             db.session.commit()
+#             return redirect(url_for('main.main_page'))
     
-        elif new_team_name:  # Create new team
-            # If user is already on a team in this game, prevent creating another
-            if existing_membership:
-                flash("You are already on a team for this game.", "warning")
-                return redirect(url_for('main.main_page'))
-            # Create new team and membership
-            team = Team(name=new_team_name, game_id=game_id)
-            db.session.add(team)
-            db.session.commit()
-            membership = TeamMembership(user_id=current_user.id, team_id=team.id, role='captain')
-            session['active_team_id'] = membership.team_id
-            db.session.add(membership)
-            db.session.commit()
-            return redirect(url_for('main.main_page'))
+#         elif new_team_name:  # Create new team
+#             # If user is already on a team in this game, prevent creating another
+#             if existing_membership:
+#                 flash("You are already on a team for this game.", "warning")
+#                 return redirect(url_for('main.main_page'))
+#             # Create new team and membership
+#             team = Team(name=new_team_name, game_id=game_id)
+#             db.session.add(team)
+#             db.session.commit()
+#             membership = TeamMembership(user_id=current_user.id, team_id=team.id, role='captain')
+#             session['active_team_id'] = membership.team_id
+#             db.session.add(membership)
+#             db.session.commit()
+#             return redirect(url_for('main.main_page'))
 
-    return render_template('joingame.html', games=games, teams_by_game=teams_by_game)
+#     return render_template('joingame.html', games=games, teams_by_game=teams_by_game)
 
-@main_bp.route('/switch_team/<int:team_id>')
+@main_bp.route('/api/switch_team/<int:team_id>', methods=['POST'])
 @login_required
 def switch_team(team_id):
     membership = TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
     if not membership:
-        flash("You are not a member of that team.", "danger")
-        return redirect(url_for('main.main_page'))
+        return jsonify({"success": False, "message": "You are not a member of that team."}), 403
 
+    # Update server-side session (for online users)
     session['active_team_id'] = team_id
-    flash("Switched to new team/game.", "success")
 
     game = membership.team.game
     gametype_name = (game.gametype.name.lower() if game and game.gametype else None)
 
-    if gametype_name == 'navigation':
-        return redirect(url_for('main.main_page', #game_id=game.id
-                                ))
-    elif gametype_name == 'findloc':
-        return redirect(url_for('main.findloc', #game_id=game.id
-                                ))
-    else:
-        flash("Unsupported or undefined game type.", "warning")
-        return redirect(url_for('main.main_page'))
+    return jsonify({
+        "success": True,
+        "team_id": team_id,
+        "game_id": game.id if game else None,
+        "gametype": gametype_name,
+        "message": f"Switched to team '{membership.team.name}'"
+    })
+
+
+
+# @main_bp.route('/switch_team/<int:team_id>')
+# @login_required
+# def switch_team(team_id):
+#     membership = TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
+#     if not membership:
+#         flash("You are not a member of that team.", "danger")
+#         return redirect(url_for('main.main_page'))
+
+#     session['active_team_id'] = team_id
+#     flash("Switched to new team/game.", "success")
+
+#     game = membership.team.game
+#     gametype_name = (game.gametype.name.lower() if game and game.gametype else None)
+
+#     if gametype_name == 'navigation':
+#         return redirect(url_for('main.main_page', #game_id=game.id
+#                                 ))
+#     elif gametype_name == 'findloc':
+#         return redirect(url_for('main.findloc', #game_id=game.id
+#                                 ))
+#     else:
+#         flash("Unsupported or undefined game type.", "warning")
+#         return redirect(url_for('main.main_page'))
+
+
 
 @main_bp.route('/options')
 @login_required
@@ -365,52 +463,6 @@ def options():
 def faq():
     return render_template('faq.html')
 
-@main_bp.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        email = request.form['email']
-        display_name = request.form['display_name']
-        password = request.form['password']
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered.', 'danger')
-            return redirect(url_for('main.register'))
-        user = User(email=email, display_name=display_name,
-                    password_hash=generate_password_hash(password))
-        db.session.add(user)
-        #db.session.commit()
-
-        # Assign "user" role
-        user_role = Role.query.filter_by(name="user").first()
-        if not user_role:
-            user_role = Role(name="user", description="Standard user")
-            db.session.add(user_role)
-            #db.session.commit()
-        db.session.add(UserRole(user_id=user.id, role_id=user_role.id))
-        db.session.commit()
-
-        flash('Registration successful. Please log in.', 'success')
-        return redirect(url_for('main.login'))
-    return render_template('user/register.html')
-
-@main_bp.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password_hash, password):
-            login_user(user,remember=True)
-            flash('Logged in successfully.', 'success')
-            return redirect(url_for('main.account'))
-        flash('Invalid credentials.', 'danger')
-    return render_template('user/login.html')
-
-@main_bp.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('Logged out.', 'success')
-    return redirect(url_for('main.login'))
 
 @main_bp.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -485,7 +537,7 @@ def location(location_id):
 
 
 
-from app.main.cache import deleted_tombstones, cleanup_tombstones
+
 
 @main_bp.route('/api/location/found', methods=['POST'])
 @login_required
@@ -562,8 +614,6 @@ def get_team_locations(team_id):
     return jsonify(results)
 
 
-import random
-from itertools import cycle
 
 def assign_locations_to_teams(game_id):
     game = Game.query.get(game_id)
