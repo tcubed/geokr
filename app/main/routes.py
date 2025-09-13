@@ -93,7 +93,9 @@ def index():
         else:
             flash("No active team selected.", "warning")
     
-    return redirect(url_for("auth.login"))  # or render landing page template
+    #return redirect(url_for("auth.login"))  # or render landing page template
+    return redirect(url_for("auth.register_or_login"))  # or render landing page template
+
     # Show games whose start date is no older than yesterday
     #yesterday = datetime.utcnow() - timedelta(days=1)
     #games = Game.query.filter(Game.start_time >= yesterday).all()
@@ -166,7 +168,7 @@ def map_prefetch():
 @login_required
 def findloc():
     if not current_user.is_authenticated:
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.register_or_login'))
 
     # Get the active team
     team = get_active_team(current_user)

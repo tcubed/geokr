@@ -141,6 +141,43 @@ def login():
     return render_template('user/login.html')
 
 
+@auth_bp.route('/register_or_login', methods=['GET', 'POST'])
+def register_or_login():
+    if request.method == 'POST':
+        email = request.form.get('email').lower().strip()
+        display_name = request.form.get('display_name')
+        
+        if not email or not display_name:
+            flash("Please provide both email and display name.", "warning")
+            return redirect(url_for('auth.login'))
+
+        # Check for existing user
+        user = User.query.filter_by(email=email).first()
+
+        if user:
+            # Login existing user
+            flash(f"Welcome back, {user.display_name}!", "success")
+        else:
+            # Create a new user
+            user = User(email=email, display_name=display_name)
+            db.session.add(user)
+            db.session.commit()
+            assign_user_role(user)
+            flash("Registration successful. You are now logged in.", "success")
+            
+        login_user(user, remember=True)
+        
+        # Generate and store a long-lived token
+        resume_token = generate_resume_token(user.email)
+        
+        # Serve a page that stores the token and redirects
+        return render_template("user/magic_success.html", 
+                               resume_token=resume_token,
+                               display_name=user.display_name)
+    
+    # For GET requests, show the combined form
+    return render_template('user/login.html')
+
 # @auth_bp.route('/login_leg2', methods=['GET', 'POST'])
 # def login_leg2():
 #     if request.method == 'POST':

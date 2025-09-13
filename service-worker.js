@@ -266,14 +266,14 @@ self.addEventListener('fetch', event => {
 
     // Image caching
     if (url.pathname.match(/\.(png|jpg|jpeg|gif|webp)$/)) {
-      console.log('[SW] Image request:', url.href);
+      //console.log('[SW] Image request:', url.href);
       event.respondWith(fetchWithStrategy(event.request, 'cache-first', IMAGE_CACHE, OFFLINE_TILE_URL));
       return;
     }
 
     // CSS, JS, Fonts → cache-first
     if (url.pathname.match(/\.(css|js|woff2|woff|ttf)$/)) {
-      console.log('[SW] Asset request:', url.href);
+      //console.log('[SW] Asset request:', url.href);
       event.respondWith(fetchWithStrategy(event.request,'cache-first', ASSET_CACHE));
       return;
     }

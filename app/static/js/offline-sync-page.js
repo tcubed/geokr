@@ -151,7 +151,9 @@
 
         // 2.  Merge any pending offline updates (optimistic)
         const queued = await rootObj.offlineDB.getAllUpdates();
-        console.log('[offlineSync] Merging offline queued updates:', queued);
+        if (queued && queued.length > 0) {
+          console.log('[offlineSync] Merging offline queued updates:', queued);
+        }
         queued.forEach(u => {
           if (u.body?.location_id != null) {
             const idx = gameState.locations.findIndex(l => l.id == u.body.location_id);
@@ -223,8 +225,10 @@
 
     // 1. SEND QUEUED OFFLINE UPDATES FIRST
     const sentCount = await syncAllQueuedUpdates({ offlineDB,teamId });
-    console.log(`[offlineSync] Sent ${sentCount} queued updates`);
-
+    if(sentCount>0){
+      console.log(`[offlineSync] Sent ${sentCount} queued updates`);
+    }
+    
     // 2. FETCH AUTHORITATIVE SERVER STATE AND RECONCILE
     if (gameId && teamId) {
       await fetchServerGameState(gameId, teamId, {

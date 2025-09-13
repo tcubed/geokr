@@ -300,24 +300,24 @@
     const token = localStorage.getItem("resumeToken");
     if (!token) return;
 
-    try {
-      const res = await fetch("/resume-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token })
-      });
-      const data = await res.json();
-      if (data.success) {
-        console.log("[Resume] Logged back in as", data.display_name);
+    // try {
+    //   const res = await fetch("/resume-login", {
+    //     method: "POST",
+    //     headers: { "Content-Type": "application/json" },
+    //     body: JSON.stringify({ token })
+    //   });
+    //   const data = await res.json();
+    //   if (data.success) {
+    //     console.log("[Resume] Logged back in as", data.display_name);
 
-        // If already on login or register page, bounce them to main area
-        if (["/login", "/register"].includes(window.location.pathname)) {
-          window.location.href = "/findloc";  // or your game landing page
-        }
-      }
-    } catch (err) {
-      console.warn("Offline or resume failed:", err);
-    }
+    //     // If already on login or register page, bounce them to main area
+    //     if (["/login", "/register"].includes(window.location.pathname)) {
+    //       window.location.href = "/findloc";  // or your game landing page
+    //     }
+    //   }
+    // } catch (err) {
+    //   console.warn("Offline or resume failed:", err);
+    // }
 
 
 
