@@ -1,8 +1,11 @@
 import os
 import imghdr
+import csv
+from io import StringIO
+
 from flask import (Blueprint, render_template, request, jsonify, Response,
-                   redirect, url_for, flash,current_app)
-from flask_login import login_required
+                   redirect, url_for, flash,current_app,abort)
+from flask_login import login_required,current_user
 from functools import wraps
 from sqlalchemy.orm.attributes import flag_modified
 from app.models import (db,
@@ -10,9 +13,6 @@ from app.models import (db,
                         Game,Location, Character, )
 
 from app.admin import admin_bp
-
-
-from flask import render_template
 
 
 def check_auth(username, password):
@@ -32,6 +32,19 @@ def requires_auth(f):
         return f(*args, **kwargs)
     return decorated
 
+def admin_required(f):
+    """
+    Decorator that protects a route by checking for user authentication and admin status.
+    """
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        # Check if the current user is authenticated and is an admin
+        if not current_user.is_authenticated or not current_user.is_admin:
+            # Abort with a 403 Forbidden error if conditions are not met
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 
 @admin_bp.route('/load_sample_data')
 @requires_auth
@@ -220,6 +233,103 @@ def admin_api_character_detail(id):
 def manage_game_locations():
     games = Game.query.order_by(Game.name).all()
     return render_template('admin/game_locations.html', games=games)
+
+@admin_bp.route('/export_locations', methods=['GET'])
+def export_locations():
+    # Fetch all locations from the database
+    locations = Location.query.all()
+
+    # In-memory text buffer for the CSV data
+    si = StringIO()
+    cw = csv.writer(si)
+
+    # Write the CSV header (column names)
+    header = [
+        "id", "game_id", "name", "latitude", "longitude", 
+        "clue_text", "unlock_condition", "image_url", "show_pin"
+    ]
+    cw.writerow(header)
+
+    # Write data rows
+    for location in locations:
+        row = [
+            location.id, location.game_id, location.name, 
+            location.latitude, location.longitude, location.clue_text, 
+            location.unlock_condition, location.image_url, location.show_pin
+        ]
+        cw.writerow(row)
+
+    # Prepare the Flask response with CSV data
+    output = si.getvalue()
+    si.close()
+
+    response = Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=locations_export.csv"}
+    )
+    return response
+
+@admin_bp.route('/import_locations/<int:game_id>', methods=['GET'])
+@admin_required
+def import_locations_form(game_id):
+    game = Game.query.get_or_404(game_id)
+    return render_template('admin/import_locations.html', game=game)
+
+@admin_bp.route('/import_locations/<int:game_id>', methods=['POST'])
+@admin_required
+def import_locations(game_id):
+    game = Game.query.get_or_404(game_id)
+    # Check if a file was uploaded
+    if 'file' not in request.files:
+        flash('No file part', 'danger')
+        return redirect(url_for('main.import_locations', game_id=game_id))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('No selected file', 'danger')
+        return redirect(url_for('main.import_locations', game_id=game_id))
+
+    if file:
+        try:
+            # Read the CSV file from memory
+            stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
+            csv_reader = csv.reader(stream)
+            header = next(csv_reader) # Skip the header row
+            
+            # Dictionary to map CSV headers to model attributes
+            csv_to_model_map = {
+                'name': 'name',
+                'latitude': 'latitude',
+                'longitude': 'longitude',
+                'clue_text': 'clue_text',
+                'unlock_condition': 'unlock_condition',
+                'image_url': 'image_url',
+                'show_pin': 'show_pin'
+            }
+            
+            imported_count = 0
+            for row in csv_reader:
+                row_data = dict(zip(header, row))
+                
+                # Create a new Location object
+                location_data = {'game_id': game.id}
+                for csv_col, model_attr in csv_to_model_map.items():
+                    if csv_col in row_data and row_data[csv_col]:
+                        location_data[model_attr] = row_data[csv_col]
+                
+                new_location = Location(**location_data)
+                db.session.add(new_location)
+                imported_count += 1
+            
+            db.session.commit()
+            flash(f'Successfully imported {imported_count} locations.', 'success')
+            return redirect(url_for('main.manage_game', game_id=game_id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred during import: {e}', 'danger')
+            return redirect(url_for('main.import_locations', game_id=game_id))
 
 # ====================================================================
 # ROUTES ADMIN

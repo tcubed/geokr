@@ -140,13 +140,17 @@
                 <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_locations') }}">Game Locations</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_routes') }}">Game Routes</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.copy_locations') }}">Copy Locations</a>
+                
+                {% if game and game.id %}
+                <a class="dropdown-item" href="{{ url_for('admin_cust.import_locations', game_id=game.id) }}">Import Locations</a>
+                {% endif %}
+                
                 <a class="dropdown-item" href="{{ url_for('admin.index') }}">Admin DB</a>
                 <li><hr class="dropdown-divider"></li>
 
               {% endif %}
             {% else %}
-              <li><a class="dropdown-item" href="/login">Login</a></li>
-              <li><a class="dropdown-item" href="/register">Register</a></li>
+              <li><a class="dropdown-item" href="/register_or_login">Login / Register</a></li>
             {% endif %}
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/faq">FAQ</a></li>

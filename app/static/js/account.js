@@ -127,16 +127,28 @@ const joinForm = document.getElementById('joinGameForm');
 if (joinForm) {
     joinForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const newTeamInput = document.getElementById('new_team_name');
         const gameId = gameSelect.value;
+        const teamSelect = document.getElementById('team_id');
         const teamId = teamSelect.value || null;
+        const newTeamInput = document.getElementById('new_team_name');
         const newTeamName = newTeamInput.value.trim() || null;
-        if (!teamId && !newTeamName) return showToast('Please select a team or enter a new team name.', { type: 'danger' });
         
+        if (!teamId && !newTeamName) {
+            return showToast('Please select a team or enter a new team name.', { type: 'danger' });
+        }
+
+        // 🌟 Conditionally build the body
+        let bodyData = { game_id: gameId };
+        if (newTeamName) {
+            bodyData.new_team_name = newTeamName;
+        } else {
+            bodyData.team_id = teamId;
+        }
+
         await window.offlineSync.sendOrQueue({
             url: '/api/joingame',
             method: 'POST',
-            body: { game_id: gameId, team_id: teamId, new_team_name: newTeamName },
+            body: bodyData, // 🌟 Use the conditionally built object
             timestamp: Date.now()
         }, {
             onSuccess: (data) => {
@@ -147,13 +159,13 @@ if (joinForm) {
             },
             onQueued: () => {
                 showToast('Offline: join/create action saved locally and will sync later.', { type: 'info' });
-                // We assume they want to start playing immediately, even offline
                 window.location.href = '/findloc';
             },
             onFailure: (err) => console.error('Join game failed:', err)
         });
     });
 }
+
 
 // Options Save Form
 const optionsForm = document.getElementById('options-form');

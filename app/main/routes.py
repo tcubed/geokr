@@ -1,4 +1,5 @@
 import os
+import time
 import random
 from datetime import datetime, timedelta
 from itertools import cycle
@@ -319,6 +320,7 @@ import os
 @main_bp.route('/account', methods=['GET', 'POST'])
 @login_required
 def account():
+    start_time = time.time()
     user = current_user
 
     # Handle POST updates (account info)
@@ -337,6 +339,7 @@ def account():
 
         db.session.commit()
         flash('Account updated!', 'success')
+        print(f"[account, POST] update account: {time.time()-start_time:.4f}s")
         return redirect(url_for('main.account'))
 
     # Build discoverable games + teams_by_game for “join game” section
@@ -380,6 +383,8 @@ def account():
     options = []
     if any(role.role.name == "mapper" for role in current_user.user_roles):
         options.append("mapper")
+
+    print(f"[account, GET] account: {time.time()-start_time:.4f}s")
 
     return render_template(
         'user/account.html',
@@ -451,13 +456,18 @@ def account():
 @login_required
 def api_joingame():
     #data = request.get_json()
-    data = request.get_json(force=True, silent=True) or {}
+    start_time=time.time()
+    data = request.get_json(silent=True)
+    print(f"[api_joingame] DEBUG: Data received from request.get_json(): {data}")
     if not data:
-        return jsonify({"success": False, "message": "Missing data"}), 400
+        print("[api_joingame] DEBUG: Data is None. Returning 400.")
+        return jsonify({"success": False, "message": "Missing or invalid JSON data"}), 400
+
 
     game_id = data.get('game_id')
     team_id = data.get('team_id')
     new_team_name = data.get('new_team_name', '').strip()
+    print(f"[api_joingame] DEBUG: new_team_name is: {new_team_name}")
 
     if not game_id:
         return jsonify({"success": False, "message": "Missing game_id"}), 400
@@ -479,11 +489,16 @@ def api_joingame():
         db.session.add(membership)
         db.session.commit()
         session['active_team_id'] = membership.team_id
+        print(f"[api_joingame] join existing team: {time.time()-start_time:.4f}s")
         return jsonify({"success": True, "team_id": team_id, "message": "Joined team successfully."})
 
     elif new_team_name:  # Create new team
         if existing_membership:
             return jsonify({"success": False, "message": "Already on a team in this game."}), 403
+
+        # Check for team name uniqueness before creating
+        if Team.query.filter_by(game_id=game_id, name=new_team_name).first():
+            return jsonify({"success": False, "message": "Team name already exists."}), 409
 
         team = Team(name=new_team_name, game_id=game_id)
         db.session.add(team)
@@ -492,10 +507,15 @@ def api_joingame():
         membership = TeamMembership(user_id=current_user.id, team_id=team.id, role='captain')
         db.session.add(membership)
         db.session.commit()
-        session['active_team_id'] = membership.team_id
+        
+        # 🌟 Correct the return statement to use the new team's ID
+        session['active_team_id'] = team.id
+
+        print(f"[api_joingame] create new team: {time.time()-start_time:.4f}s")
 
         return jsonify({"success": True, "team_id": team.id, "message": "Created team and joined successfully."})
 
+    print(f"[api_joingame] send back, need to do something: {time.time()-start_time:.4f}s")
     return jsonify({"success": False, "message": "Must select or create a team."}), 400
 
 

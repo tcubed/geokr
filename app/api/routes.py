@@ -1,4 +1,4 @@
-import datetime
+import datetime, time
 import random
 from itertools import cycle
 from sqlalchemy.orm.attributes import flag_modified
@@ -477,6 +477,7 @@ def reset_locations(team_id):
 @api_bp.route('/api/game/state', methods=['GET'])
 @login_required
 def get_game_state():
+    start_time = time.time()
     game_id = request.args.get('game_id', type=int)
     team_id = request.args.get('team_id', type=int)
 
@@ -484,10 +485,13 @@ def get_game_state():
         return jsonify({"error": "Missing game_id or team_id"}), 400
 
     # Query all locations for this game assigned to this team
+    db_query_start_time = time.time()
     assignments = TeamLocationAssignment.query.filter_by(
         game_id=game_id,
         team_id=team_id
     ).order_by(TeamLocationAssignment.id).all()
+    db_query_duration = time.time() - db_query_start_time
+    print(f"DEBUG: get_game_state DB query took {db_query_duration:.4f}s")
 
     locations_found = []
     current_index = 0
@@ -500,6 +504,9 @@ def get_game_state():
         if a.found:
             current_index = idx + 1  # current_index points to next location to find
 
+    total_duration = time.time() - start_time
+    print(f"DEBUG: get_game_state total duration was {total_duration:.4f}s")
+    
     return jsonify({
         "game_id": game_id,
         "team_id": team_id,
