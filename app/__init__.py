@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import timedelta
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -26,7 +27,9 @@ login_manager.login_view = 'auth.login'  # or your login route
 
 def create_app():
     app = Flask(__name__)
+    
     print(f"Template folder: {app.template_folder}")
+    app.config['VERSION'] = str(int(time.time()))  # or use a static number for production
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -46,6 +49,10 @@ def create_app():
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
     app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_PASSWORD'))
 
+    # Disable static file caching for development
+    # Flask's default is 12 hours (43200 seconds)
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
 
     app.secret_key = 'your-secret-ballroom'  # Needed for Flask-Admin
 
@@ -59,9 +66,22 @@ def create_app():
         return {
             'is_admin': current_user.is_authenticated and current_user.is_admin
         }
+    
+    @app.context_processor
+    def inject_version():
+        return dict(version=app.config['VERSION'])
     # def inject_user():
     #     return dict(current_user=current_user)
     
+    @app.after_request
+    def add_header(response):
+        if app.debug:
+            # Disable caching
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     with app.app_context():
         #from . import routes
         #from . import models

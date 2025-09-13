@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Manage Game Routes{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h2>Manage Routes</h2>
+
+  <!-- Game Selector -->
+  <div class="mb-3">
+    <label for="gameSelect" class="form-label">Select Game:</label>
+    <select id="gameSelect" class="form-select">
+      <option value="">-- Select a game --</option>
+      {% for game in games %}
+        <option value="{{ game.id }}">{{ game.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Routes Container -->
+  <div id="routesContainer" class="mt-4">
+    <!-- Routes will be dynamically added here -->
+  </div>
+
+  <!-- Buttons -->
+  <div class="mt-3">
+    <button id="addRouteBtn" class="btn btn-primary">+ Add Route</button>
+    <button id="saveRoutesBtn" class="btn btn-success">Save All Routes</button>
+  </div>
+  <div id="sync-toast-container" style="
+    position: fixed; bottom: 20px; right: 20px;
+    max-width: 300px; display: flex; flex-direction: column;
+    gap: 8px; z-index:10001;"></div>
+</div>
+
+<!-- Template for a single route -->
+<template id="routeTemplate">
+  <div class="card mb-3 route-card p-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5>Route <span class="route-number"></span></h5>
+      <button class="btn btn-sm btn-danger remove-route-btn">Remove</button>
+    </div>
+    <div class="locations-list list-group mb-2">
+      <!-- Location selectors will go here -->
+    </div>
+    <button class="btn btn-sm btn-secondary add-loc-btn">+ Add Location</button>
+  </div>
+</template>
+
+<!-- Template for a single location select -->
+<template id="locationTemplate">
+  <div class="list-group-item d-flex align-items-center mb-1">
+    <select class="form-select form-select-sm me-2 location-select">
+      <option value="">-- Select Location --</option>
+    </select>
+    <button class="btn btn-sm btn-outline-danger remove-loc-btn">Remove</button>
+  </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/account.js') }}?v={{ version }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/game_routes.js') }}?v={{ version }}"></script>
+{% endblock %}

@@ -21,7 +21,6 @@ def generate_magic_token(email):
     """Generate a signed token for magic login (15 min expiry)."""
     return serializer.dumps(email, salt='magic-link')
 
-
 def send_magic_link_email(user):
     """Send the magic login link to the user via email."""
     token = generate_magic_token(user.email)
@@ -46,6 +45,16 @@ def send_magic_link_email(user):
     except Exception as e:
         current_app.logger.error(f"Error sending magic link to {user.email}: {e}")
         return False
+
+def generate_resume_token(email):
+    """Generate a long-lived signed token (30 days) for offline resume."""
+    return serializer.dumps(email, salt="resume-token")
+
+
+def verify_resume_token(token, max_age=2592000):  # 30 days
+    """Verify resume token (default 30 days)."""
+    return serializer.loads(token, salt="resume-token", max_age=max_age)
+
 
 
 def assign_user_role(user):
@@ -132,31 +141,31 @@ def login():
     return render_template('user/login.html')
 
 
-@auth_bp.route('/login_leg2', methods=['GET', 'POST'])
-def login_leg2():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        if not email:
-            flash("Please enter your email.", "warning")
-            return redirect(url_for('auth.login'))
+# @auth_bp.route('/login_leg2', methods=['GET', 'POST'])
+# def login_leg2():
+#     if request.method == 'POST':
+#         email = request.form.get('email')
+#         if not email:
+#             flash("Please enter your email.", "warning")
+#             return redirect(url_for('auth.login'))
 
-        user = User.query.filter_by(email=email.lower().strip()).first()
-        current_app.logger.debug(f"Login attempt: email={email}, user_found={bool(user)}")
-        if not user:
-            flash("Email not found.", "danger")
-            current_app.logger.info(f"Login failed: {email} not found")
-            return redirect(url_for('auth.login'))
+#         user = User.query.filter_by(email=email.lower().strip()).first()
+#         current_app.logger.debug(f"Login attempt: email={email}, user_found={bool(user)}")
+#         if not user:
+#             flash("Email not found.", "danger")
+#             current_app.logger.info(f"Login failed: {email} not found")
+#             return redirect(url_for('auth.login'))
 
-        if send_magic_link_email(user):
-            flash('Magic login link sent to your email.', 'success')
-            current_app.logger.info(f"Magic link sent to: {email}")
-        else:
-            flash('Failed to send email. Please try again later.', 'danger')
-            current_app.logger.warning(f"Failed to send magic link to: {email}")
+#         if send_magic_link_email(user):
+#             flash('Magic login link sent to your email.', 'success')
+#             current_app.logger.info(f"Magic link sent to: {email}")
+#         else:
+#             flash('Failed to send email. Please try again later.', 'danger')
+#             current_app.logger.warning(f"Failed to send magic link to: {email}")
 
-        return redirect(url_for('auth.login'))
+#         return redirect(url_for('auth.login'))
 
-    return render_template('user/login.html')
+#     return render_template('user/login.html')
 
 
 @auth_bp.route("/magic-login")
@@ -179,7 +188,16 @@ def magic_login():
 
     login_user(user, remember=True)
     flash(f"Welcome back, {user.display_name}!", "success")
-    return redirect(url_for("main.account"))
+    #return redirect(url_for("main.account"))
+    return redirect(url_for("main.findloc"))
+
+    # Generate persistent resume token
+    resume_token = generate_resume_token(user.email)
+
+    # Serve a minimal page that stores token in localStorage and redirects
+    return render_template("user/magic_success.html",
+                           resume_token=resume_token,
+                           display_name=user.display_name)
 
 
 @auth_bp.route('/logout')

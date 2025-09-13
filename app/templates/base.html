@@ -30,24 +30,75 @@
   <meta name="mobile-web-app-capable" content="yes">
 
   {% block head %}{% endblock %}
+
+  <style>
+    #offlineBanner {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #ffc107;
+      color: #212529;
+      text-align: center;
+      padding: 0.5rem 2rem 0.5rem 0.5rem;
+      font-size: 0.9rem;
+      z-index: 2000;
+    }
+    #offlineBanner button {
+      background: transparent;
+      border: none;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #212529;
+      position: absolute;
+      right: 0.5rem;
+      top: 0.2rem;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
+  <div id="offlineBanner">
+    ⚠️ You are offline. Continuing in offline mode…
+    <button id="closeOfflineBanner" aria-label="Close">&times;</button>
+  </div>
+
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
       <a class="navbar-brand" href="/">Geo Clue Hunt
+        {# Back icon only on account page #}
+        {% if request.endpoint == 'main.account' %}
+          {#
+          <a class="btn btn-outline-light me-2 fw-bold" href="{{ url_for('main.findloc') }}" title="Back to game">
+            <i class="bi bi-arrow-left"></i>
+          </a>
+          #}
+          <div id="online-status" class="me-3" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+            <a class="btn btn-outline-light fw-bold text-center" href="{{ url_for('main.findloc') }}" title="Back to game">
+              <i class="bi bi-arrow-left"></i>
+            </a>
+            <span style="font-size: 0.8rem; color: white; margin-top: 2px;">Back To Game</span>
+          </div>
+
+
+        {% endif %}
+
+
         {% if game and game.name %}
         <div class="small" style="font-size: 0.6em; line-height:1; margin-top:1px;">
           Game: {{ game.name }}
         </div>
         {% endif %}
       </a>
-      <div class="d-flex ms-auto">
-        <div>
-          <i class="bi bi-wifi" style="font-size: 24px; color: white;"></i>
-
+      <div class="d-flex ms-auto align-items-center">
+        <div id="online-status" class="me-3" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+          <i id="wifi-icon" class="bi bi-wifi" style="font-size: 24px; color: white;"></i>
+          <span id="online-text" style="font-size: 0.8rem;color: white;">Online</span>
         </div>
-        <div class="dropdown">
-          <a class="nav-link text-white dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <div class="dropdown" style="display: flex; flex-direction: column; align-items: center;text-align: center;">
+          <a class="nav-link text-white dropdown-toggle" href="#" id="userDropdown" role="button" 
+            data-bs-toggle="dropdown" aria-expanded="false">
             <i class="fa-solid fa-user fa-lg"></i>
             {% if current_user.is_authenticated %}
               <span class="ms-2">{{ current_user.display_name or current_user.email }}</span>
@@ -61,7 +112,7 @@
               </div>
               {% endif %}
           {% endif %}
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+          <ul id="dropdown-menu-list" class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
             {% if current_user.is_authenticated %}
               <li>
                 <a class="dropdown-item" href="/account">
@@ -70,26 +121,26 @@
                   {% else %}
                     <i class="fa-solid fa-user"></i>
                   {% endif %}
-                  Account/Switch Game
+                  Account
                 </a>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('main.joingame_page') }}">
-                  <i class="fa-solid fa-people-group"></i> Join Game/Switch Team
-                </a>
-              </li>
+              {#
               <li>
               <a class="dropdown-item" href="{{ url_for('main.options') }}">
                 <i class="fa-solid fa-sliders"></i> Options
               </a>
             </li>
+            #}
               <li><a class="dropdown-item" href="/logout">Logout</a></li>
 
               {% if is_admin %}
                 <li><hr class="dropdown-divider"></li>
                 <li><h6 class="dropdown-header text-muted small fw-bold">Admin Tools</h6></li>
                 <a class="dropdown-item" href="{{ url_for('main.game_admin') }}">Game Mgmt</a>
+                <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_locations') }}">Game Locations</a>
+                <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_routes') }}">Game Routes</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.copy_locations') }}">Copy Locations</a>
+                <a class="dropdown-item" href="{{ url_for('admin.index') }}">Admin DB</a>
                 <li><hr class="dropdown-divider"></li>
 
               {% endif %}
@@ -124,11 +175,20 @@
     {% block content %}{% endblock %}
   </div>
   
-  
+  {#
+  <div id="game-data" 
+    data-game-id="{{ game.id }}"
+    data-team-id="{{ team.id }}"
+    data-next-index="{{ next_index }}"
+    data-locations='{{ locations|tojson|safe }}'
+    data-game-data='{"gameId": {{ game.id|tojson }}, "teamId": {{ team.id|tojson }}, "locations": {{ locations|tojson|safe }}, "currentIndex": {{ current_index|default(0) }} }'>
+  </div>
+#}
+
   <!-- JS Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
-  
+    
+    
   <!-- indexedDB helper-->
   <!--<script src="https://cdn.jsdelivr.net/npm/idb@7.1.1/build/iife/index-min.js"></script>
   <script src="https://unpkg.com/idb@7.1.1/build/iife/index-min.js"></script>-->
@@ -149,13 +209,65 @@
   <script src="{{ url_for('static', filename='libs/jsQR.js') }}"></script>
 
   <!-- Custom JS Modules -->
-   <!--
-  <script type="module" src="{{ url_for('static', filename='js/localStorage.js') }}"></script>
-  -->
-  <script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/offline-sync.js') }}"></script>
-  <script type="module" src="{{ url_for('static', filename='js/account.js') }}"></script>
-  
+  <script type="module" src="{{ url_for('static', filename='js/common-ui.js') }}?v={{ version }}"></script>
+  <script src="{{ url_for('static', filename='js/offline-db.js') }}?v={{ version }}"></script>
+  <script src="{{ url_for('static', filename='js/offline-sync-page.js') }}?v={{ version }}"></script>
+
+  {% if teams_by_game is defined %}
+<script>
+  window.TEAMS_BY_GAME = {{ teams_by_game | tojson }};
+  window.GAMES = {{ games | tojson }};
+</script>
+{% endif %}
+
+  <script>
+    
+
+  // Static metadata for the game — never mutated
+  window.GAME_CONTEXT = {
+    gameId: {% if game is defined and game %}{{ game.id }}{% else %}null{% endif %},
+    teamId: {% if team is defined and team %}{{ team.id }}{% else %}null{% endif %}
+  };
+
+  // Helper to merge with localStorage "gameState" as the true client-side state
+  window.getCurrentGameState = function() {
+    const STORAGE_KEY = `geo-game-state_${window.GAME_CONTEXT.gameId || 'default'}`;
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    const state = savedState ? JSON.parse(savedState) : {};
+    
+    return {
+      gameId: state.gameId || window.GAME_CONTEXT.gameId,
+      teamId: state.teamId || window.GAME_CONTEXT.teamId,
+      locations: state.locations || [],
+      currentIndex: state.currentIndex || 0
+    };
+  };
+
+
+  </script>
+  <script type="module" src="{{ url_for('static', filename='js/localStorage.js') }}?v={{ version }}"></script>
+  <script type="module" src="{{ url_for('static', filename='js/account.js') }}?v={{ version }}"></script>
+  <script>
+    // PREFETCH LOGIC
+    const wifiIcon = document.getElementById('wifi-icon');
+    const onlineText = document.getElementById('online-text');
+
+    function updateOnlineStatus() {
+      if (navigator.onLine) {
+        wifiIcon.style.color="white";
+        onlineText.textContent = 'ONLINE';
+        onlineText.style.color='white';
+      } else {
+        wifiIcon.style.color="#222";
+        onlineText.textContent = 'offline';
+        onlineText.style.color='red';
+      }
+    }
+
+    updateOnlineStatus();
+    setInterval(updateOnlineStatus, 2000);
+  </script>
+
   <script>
     document.addEventListener("DOMContentLoaded", function() {
       const alerts = document.querySelectorAll('.alert');
@@ -180,6 +292,58 @@
     }
 
 
+  </script>
+
+  <!-- Auto-resume script runs everywhere -->
+  <script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    const token = localStorage.getItem("resumeToken");
+    if (!token) return;
+
+    try {
+      const res = await fetch("/resume-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      const data = await res.json();
+      if (data.success) {
+        console.log("[Resume] Logged back in as", data.display_name);
+
+        // If already on login or register page, bounce them to main area
+        if (["/login", "/register"].includes(window.location.pathname)) {
+          window.location.href = "/findloc";  // or your game landing page
+        }
+      }
+    } catch (err) {
+      console.warn("Offline or resume failed:", err);
+    }
+
+
+
+    // Offline/online banner with dismiss
+      const banner = document.getElementById("offlineBanner");
+      const closeBtn = document.getElementById("closeOfflineBanner");
+      let dismissed = false;
+
+      function updateBanner() {
+        if (!navigator.onLine && !dismissed) {
+          banner.style.display = "block";
+        } else {
+          banner.style.display = "none";
+          dismissed = false; // reset dismissal when back online
+        }
+      }
+
+      closeBtn.addEventListener("click", () => {
+        banner.style.display = "none";
+        dismissed = true;
+      });
+
+      window.addEventListener("online", updateBanner);
+      window.addEventListener("offline", updateBanner);
+      updateBanner(); // run on page load
+  });
   </script>
   {% block scripts %}{% endblock %}
 </body>

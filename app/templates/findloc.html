@@ -28,6 +28,9 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     user-select: none;
     white-space: nowrap;
   }
+  .clue-card {
+    display: none;
+}
 </style>
 
 {% endblock %}
@@ -41,23 +44,30 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   data-location-images="{{ locations|map(attribute='image_url')|select('string')|list|tojson }}">
 </div>
 
+<!--
 <div id="prefetch-container">
   <button id="prefetch-btn" style="display:none;">Download Game Assets</button>
-  <span id="offline-text" style="display:none; font-weight: bold; color: red;">Offline</span>
 </div>
+-->
 
 <div class="accordion" id="locationAccordion">
   {% for loc in locations %}
   <div class="accordion-item locked-clue clue-card" 
        id="clue-{{ loc.id }}" 
        data-clue-index="{{ loop.index0 }}"
-       {% if loop.index0 > current_index %}style="display: none;"{% endif %}>
+       {% if not loc.found and loop.index0 > current_index %}style="display: none;"{% endif %}>
     
     <h2 class="accordion-header">
-      <button class="accordion-button {% if loop.index0 != current_index %}collapsed{% endif %}" 
+      <button class="accordion-button {% if not loc.found or loop.index0 != current_index %}collapsed{% endif %}" 
               type="button" 
               data-bs-toggle="collapse" 
-              data-bs-target="#collapse-{{ loc.id }}">
+              data-bs-target="#collapse-{{ loc.id }}"
+              {% if not loc.found or loop.index0 > current_index %}
+                    aria-expanded="false"
+                    {% else %}
+                    aria-expanded="true"
+                    {% endif %}
+              >
         {{ loc.name }}
       </button>
     </h2>
@@ -151,148 +161,64 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 <div id="sync-toast-container" style="position: fixed; bottom: 20px; right: 20px; max-width: 300px; display: flex; flex-direction: column; gap: 8px; z-index:10001;"></div>
 
 
-
-<!--
-
-<div id="clue"></div>
-<div id="progress">Found 0 of X</div>
-<div id="next-location">Next: TBD</div>
--->
 <div id="status"></div>
 
 <div id="clue-container"></div>
 
 <div id="fireworks-container"></div>
 
-<button id="btn-reset-locations" class="btn btn-warning">Reset All Locations</button>
-
-
 {% endblock %}
 
 {% block scripts %}
-
+ {{ super() }}
 <script type="module">
-//import { clearOfflineQueue } from '/static/js/offline-sync.js';
-import { clearOfflineQueueForTeam } from '/static/js/app-init.js';
-
-document.getElementById('btn-reset-locations').addEventListener('click', async () => {
-  if (!confirm('Really reset all location progress for this team?')) return;
-
-  try {
-    // Reset local game state first (offline-safe)
-    if (window.gameState) {
-      gameState.locations.forEach(loc => loc.found = false);
-      gameState.currentIndex = 0;
-
-      // Save state if you have a saveState function
-      if (typeof saveState === 'function') saveState();
-    }
-
-    // Clear queued offline updates for this team
-    await clearOfflineQueueForTeam(GAME_DATA.teamId);
-
-    // Try server reset if online
-    if (navigator.onLine) {
-      const resp = await fetch('/debug/reset-locations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team_id: GAME_DATA.teamId })
-      });
-      const data = await resp.json();
-      console.log('Server reset:', data);
-      alert(data.message || 'Reset done');
-    } else {
-      alert('Offline: local reset done. Server will sync when back online.');
-    }
-
-    // Reload the page (SW cache will serve the full page)
-    location.reload();
-
-  } catch (err) {
-    console.error(err);
-    alert('Reset failed');
-  }
-});
+  const VERSION = "{{ version }}";
+  console.log('VERSION: ', VERSION)
 </script>
 
-
-<script src="/static/js/utils.js"></script>
-<script>
-  const watchPosition = getCookie('watch_position') === '1';
+<script type="module">
+  import { getCookie } from '/static/js/utils.js?v={{ version }}';
+  const locationMode = getCookie('location_mode') || 'none';
   const defaultPosMode = getCookie('default_pos_mode') === '1';
-  window.watchPosition = watchPosition;
   window.defaultPosMode = defaultPosMode;
-  window.DEBUG_GAME_STATE = true; // or false to disable
+  window.DEBUG_GAME_STATE = true;
 
-  // Static metadata for the game — never mutated
   window.GAME_DATA = {
-    gameId: {{ game.id }},
-    teamId: {{ team.id }},
-    locations: {{ locations|tojson|safe }},
-    nextIndex: {{ current_index }}
+    gameId: {% if game is defined %}{{ game.id }}{% else %}null{% endif %},
+    teamId: {% if team is defined %}{{ team.id }}{% else %}null{% endif %},
+    locations: {{ locations|tojson|default('[]')|safe }},
+    currentIndex: {{ current_index|default(0) }}
   };
 
-  // Precompute location images for prefetch
   window.locationImageUrls = GAME_DATA.locations.map(l => l.image_url).filter(Boolean);
 
-  // Map bounds
   window.bounds = [
-    {{ game.min_lat }},
-    {{ game.min_lon }},
-    {{ game.max_lat }},
-    {{ game.max_lon }}
+    {% if game is defined %}
+      {{ game.min_lat|default(0) }},
+      {{ game.min_lon|default(0) }},
+      {{ game.max_lat|default(0) }},
+      {{ game.max_lon|default(0) }}
+    {% else %}
+      0,0,0,0
+    {% endif %}
   ];
+
+//console.log('Initial:', window.GAME_DATA.locations);
+//setTimeout(()=>console.log('After 3s:', window.GAME_DATA.locations),3000);
+
 </script>
 
 
 <!-- JS Libraries -->
 <!-- indexedDB helper-->
-<!--<script src="https://cdn.jsdelivr.net/npm/idb@7.1.1/build/iife/index-min.js"></script>
-<script src="https://unpkg.com/idb@7.1.1/build/iife/index-min.js"></script>-->
-<!--
-<script type="module" src="{{ url_for('static', filename='libs/index.js') }}"></script>
--->
-<!--
-<script type="module" src="https://unpkg.com/idb@8.0.3/build/index.js"></script>
--->
-<!-- Leaflet JS (must be before your custom script!) -->
 
-<!--
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
--->
-<!--
-<script src="{{ url_for('static', filename='libs/leaflet.js') }}"></script>
--->
-<!-- QR -->
- <!--
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
--->
-<!--
-<script src="{{ url_for('static', filename='libs/jsQR.js') }}"></script>
--->
-<!-- Custom JS Modules -->
-<!--
+<script type="module" src="{{ url_for('static', filename='js/validate.js') }}?v={{ version }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/map.js') }}?v={{ version }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/findloc.js') }}?v={{ version }}"></script>
+<script src="{{ url_for('static', filename='js/offline-sync-page.js') }}?v={{ version }}"></script>
 
-<script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
-<script src="{{ url_for('static', filename='js/offline-sync.js') }}"></script>
--->
-<script type="module" src="{{ url_for('static', filename='js/localStorage.js') }}"></script>
-
-<script type="module" src="{{ url_for('static', filename='js/validate.js') }}"></script>
-
-
-<script type="module" src="{{ url_for('static', filename='js/map.js') }}"></script>
-<script type="module" src="{{ url_for('static', filename='js/clue-manager.js') }}"></script>
-<script type="module" src="{{ url_for('static', filename='js/offline-game.js') }}"></script>
-
-
-<script type="module" src="{{ url_for('static', filename='js/prefetch.js') }}"></script>
-
-<script type="module" src="{{ url_for('static', filename='js/findloc.js') }}"></script>
-
-
-
-<script type="module" src="{{ url_for('static', filename='js/app-init.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/offline-game.js') }}?v={{ version }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/app-init.js') }}?v={{ version }}"></script>
 <script type="module">
     import { initQRScannerIfPresent } from "{{ url_for('static', filename='js/qr.js') }}";
     initQRScannerIfPresent();
@@ -301,87 +227,32 @@ document.getElementById('btn-reset-locations').addEventListener('click', async (
 <script>
   // PREFETCH LOGIC
   const btn = document.getElementById('prefetch-btn');
-  const offlineText = document.getElementById('offline-text');
-
-  function updateOnlineStatus() {
-    if (navigator.onLine) {
-      btn.style.display = 'inline-block';
-      offlineText.style.display = 'none';
-    } else {
-      btn.style.display = 'none';
-      offlineText.style.display = 'inline';
-    }
-  }
-
-  updateOnlineStatus();
-  setInterval(updateOnlineStatus, 2000);
-
-  btn.addEventListener('click', async() => {
-    // Replace this with your actual prefetch function
-    alert('Starting prefetch...');
-    // Prefetch tiles for multiple zoom levels
-    await prefetchTiles(bounds,[14,15,16]);
-    // Prefetch location images
-    await prefetchAssets(locationImageUrls);
-    // Prefetch API data for offline use
-    await prefetchAPIs(['/api/game-data/{{ game.id }}']);
-    console.log('All game assets downloaded for offline use!')
-  });
-</script>
-
-<script>
-  /*
-window.addEventListener('online', async () => {
-    console.log('[App] Back online, starting full sync...');
-    try {
-      // FULL SYNC: send queued updates and reconcile server state
-      await offlineSync.syncWithServer({
-        gameId: GAME_DATA.gameId,
-        teamId: GAME_DATA.teamId,
-        offlineDB: offlineDB
-      });
-
-      // REFRESH UI if needed
-      if (typeof applyGameUpdate === 'function') {
-        applyGameUpdate(window.gameState); // ensures UI matches latest state
-      }
-
-      console.log('[App] Offline updates synced and server state reconciled.');
-    } catch (err) {
-      console.error('[App] Full sync failed:', err);
-    }
-  });
-  */
-
-
-
-
-  /*
-window.addEventListener('online', async () => {
-  console.log('Back online, syncing updates...');
-  const updates = await offlineDB.getAllUpdates();
-
-  for (const update of updates) {
-    try {
-      const response = await fetch(update.url, {
-        method: update.method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(update.body)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        applyGameUpdate(data); // UI refresh
-        await offlineDB.deleteUpdate(update.id);
+  if(btn){
+    function updateOnlineItems() {
+      if (navigator.onLine) {
+        btn.style.display = 'inline-block';
       } else {
-        console.error('Failed to sync update:', update);
+        btn.style.display = 'none';
       }
-    } catch (err) {
-      console.error('Sync error, will retry later:', update);
     }
+
+    updateOnlineItems();
+    setInterval(updateOnlineItems, 2000);
+
+    btn.addEventListener('click', async() => {
+      // Replace this with your actual prefetch function
+      alert('Starting prefetch...');
+      // Prefetch tiles for multiple zoom levels
+      await prefetchTiles(bounds,[14,15,16]);
+      // Prefetch location images
+      await prefetchAssets(locationImageUrls);
+      // Prefetch API data for offline use
+      await prefetchAPIs(['/api/game-data/{{ game.id }}']);
+      console.log('All game assets downloaded for offline use!')
+    });
   }
-});
-*/
 </script>
+
+
 
 {% endblock %}

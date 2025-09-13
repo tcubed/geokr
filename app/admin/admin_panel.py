@@ -54,23 +54,27 @@ class UserRoleAdmin(AdminModelView):
 # =======================================================
 class TeamAdmin(AdminModelView):
     column_list = (
-        'id', 
-        'game', 
-        'name', 
-        'start_time', 
-        'end_time', 
-        'completion_time', 
-        'discoverable', 
+        'id',              # team_id
+        'name',            # team_name
+        'game',            # game_name (relationship)
+        'game_id',         # game_id
+        'start_time',
+        'end_time',
+        'completion_time',
+        'discoverable',
         'num_members'
     )
 
+    # Optional: labels for clarity
     column_labels = {
-        'game': 'Game',
+        'id': 'Team ID',
         'name': 'Team Name',
+        'game': 'Game Name',
+        'game_id': 'Game ID',
         'start_time': 'Start Time',
         'end_time': 'End Time',
         'completion_time': 'Elapsed',
-        'discoverable': 'discoverable',
+        'discoverable': 'Discoverable',
         'num_members': 'Members'
     }
 

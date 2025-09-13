@@ -1,7 +1,9 @@
 // /static/js/offline-sync.js
 
-(function (root) {
-  const defaultDB = root.offlineDB;
+(function (root, findLocUtils) { // Add findLocUtils as a parameter
+    const defaultDB = root.offlineDB;
+    // CRITICAL FIX: Destructure from the parameter, not a global variable
+    const { updateUIFromState } = findLocUtils || {};
 
   const BACKOFF_BASE_MS = 2000; // initial backoff
   const MAX_BACKOFF_MS = 60 * 1000; // max 1 minute
@@ -226,7 +228,13 @@
     // 2. FETCH AUTHORITATIVE SERVER STATE AND RECONCILE
     if (gameId && teamId) {
       await fetchServerGameState(gameId, teamId, {
-        onSuccess: (data) => console.log('[offlineSync] Server state reconciled', data),
+        onSuccess: (data) => {
+                    console.log('[offlineSync] Server state reconciled', data);
+                    // CRITICAL FIX: Check if the function exists before calling it
+                    if (updateUIFromState) {
+                        updateUIFromState();
+                    }
+                },
         onFailure: (err) => console.warn('[offlineSync] Failed to reconcile server state', err)
       });
     }
@@ -252,4 +260,4 @@
     fetchServerGameState, // NEW
     syncWithServer       // NEW
   };
-})(typeof self !== 'undefined' ? self : window);
+})(typeof self !== 'undefined' ? self : window, window.findLocUtils); // Pass window.findLocUtils as the second argument

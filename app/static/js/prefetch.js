@@ -83,6 +83,7 @@ function lat2tile(lat, zoom) {
 
 
 // prefetch.js
+/*
 const btn = document.getElementById('prefetch-btn');
 const offlineText = document.getElementById('offline-text');
 
@@ -107,7 +108,7 @@ btn.addEventListener('click', async () => {
 
 updateOnlineStatus();
 setInterval(updateOnlineStatus, 2000);
-
+*/
 
 //console.log('assign to window')
 // Expose functions globally

@@ -2,16 +2,12 @@
 //import { sendOrQueue } from './offline-sync.js'; // Your unified offline-sync module
 //import { offlineDB } from './offline-db.js';  // Your IndexedDB helper
 //import { queueOfflineAction } from './localStorage.js'; // fallback queue for localStorage
+import { showToast } from './common-ui.js';
 import { haversine } from './map.js'; // distance calc helper
 import {gameState,gameId,loadState,saveState} from './localStorage.js'; // Load game state
-import { showCurrentClue } from './clue-manager.js'; // Show current clue in UI
-import { GAME_DATA } from './globals.js';
+//import { showCurrentClue } from './clue-manager.js'; // Show current clue in UI
+//import { GAME_DATA } from './globals.js';
 import {submitLocationValidation} from './offline-game.js'; // main API wrapper for submitting validation
-//import { markLocationFound } from './offline-game.js'; // main API wrapper for marking found
-
-//const { gameState, loadState, saveState } = window.gameStorage;
-//const gameId = window.GAME_DATA.gameId;  // or window.gameStorage.gameId if you expose it there
-
 
 const offlineDB = self.offlineDB; // Explicit for clarity
 const sendOrQueue = self.sendOrQueue; // Explicit for clarity
@@ -94,101 +90,10 @@ export function handleSelfieCapture(selfieBlob, locationId) {
 }
 
 
-
-
-
 function showFeedback(message, status) {
   // Replace with Bootstrap alert or your own DOM feedback
   console.log(`[${status.toUpperCase()}] ${message}`);
 }
-
-
-// Main found button logic (combine the duplicated event listeners)
-document.addEventListener('DOMContentLoaded', () => {
-  //console.log('validate: foundBtn -- should do nothing')
-  loadState();
-  //showCurrentClue();
-
-  /*
-  const foundBtn = document.getElementById('found-btn');
-  if (!foundBtn) return;
-
-  foundBtn.addEventListener('click', async () => {
-    const loc = gameState.locations[gameState.currentIndex];
-    if (!loc) {
-      alert('No current location found.');
-      return;
-    }
-
-    // Optimistic local update
-    loc.found = true;
-    saveState();
-
-    try {
-      // Use your offline-sync sendOrQueue function here for robust sync
-      await sendOrQueue({
-        url: `/api/location/found`,
-        method: 'POST',
-        body: {
-          game_id: GAME_DATA.gameId,
-          team_id: GAME_DATA.teamId,
-          lat: currentLat,
-          lon: currentLon
-        },
-        timestamp: Date.now(),
-      }, {
-        offlineDB,
-        onSuccess: () => showFeedback(`Location ${loc.id} synced online`, 'success'),
-        onFailure: () => {
-          showFeedback(`Offline: queued location ${loc.id}`, 'warning');
-          queueOfflineAction({
-            type: 'FOUND_LOCATION',
-            locationId: loc.id,
-            gameId: GAME_DATA.gameId,
-            teamId: GAME_DATA.teamId,
-            lat: currentLat,
-            lon: currentLon,
-            timestamp: Date.now()
-          });
-        }
-      });
-    } catch (err) {
-      console.error('Sync failed:', err);
-      queueOfflineAction({
-        type: 'FOUND_LOCATION',
-        locationId: loc.id,
-        gameId: GAME_DATA.gameId,
-        teamId: GAME_DATA.teamId,
-        lat: currentLat,
-        lon: currentLon,
-        timestamp: Date.now()
-      });
-    }
-
-    // Advance to next clue or finish
-    if (gameState.currentIndex < gameState.locations.length - 1) {
-      gameState.currentIndex++;
-      saveState();
-      showCurrentClue();
-    } else {
-      alert('🎉 All locations complete!');
-    }
-  });
-  */
-
-});
-
-
-
-//  document.addEventListener('DOMContentLoaded', () => {
-//     document.querySelectorAll('.btn-validate-button').forEach(btn => {
-//       btn.addEventListener('click', () => {
-//         const clueId = btn.dataset.clueId;
-//         validateByButton(clueId);
-//       });
-//     });
-
-//     // --- individual methods wired to buttons ---
 
 
    

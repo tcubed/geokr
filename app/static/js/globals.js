@@ -6,7 +6,7 @@ export const GAME_DATA = {
   gameId: window.gameId || 0,
   teamId: window.teamId || 0,
   locations: window.locations || [],
-  nextIndex: window.nextIndex || 0
+  currentIndex: window.currentIndex || 0
 };
 
 export const locationImageUrls = GAME_DATA.locations.map(l => l.image_url).filter(Boolean);

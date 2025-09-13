@@ -109,7 +109,8 @@ class Team(db.Model):
     end_time = db.Column(db.DateTime, nullable=True)  # <-- Add this line
     discoverable = db.Column(db.Boolean, default=True)  # Whether other teams can find/join
     memberships = db.relationship('TeamMembership', back_populates='team', cascade="all, delete-orphan")
-    
+    data = db.Column(JSON, default=lambda: {})
+
     game = db.relationship('Game', back_populates='teams')
     location_assignments = db.relationship('TeamLocationAssignment', back_populates='team', cascade='all, delete-orphan')
 

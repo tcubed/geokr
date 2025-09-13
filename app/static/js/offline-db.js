@@ -1,10 +1,5 @@
 // /static/js/offline-db.js
 
-// module style
-//export const offlineDB = (() => {
-// self style
-//self.offlineDB = (() => {
-// environment-aware
 (function (root) {
   const offlineDB = (() => {
   const DB_NAME = 'geo-game-db';

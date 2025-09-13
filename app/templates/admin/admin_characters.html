@@ -47,7 +47,7 @@
         document.getElementById('locationSelect').innerHTML = '<option value="">-- Select Location --</option>';
         return;
       }
-      const res = await fetch(`/admin/api/locations?game_id=${gameId}`);
+      const res = await fetch(`/api/locations?game_id=${gameId}`);
       const locations = await res.json();
       const locationSelect = document.getElementById('locationSelect');
       locationSelect.innerHTML = '<option value="">-- Select Location --</option>';

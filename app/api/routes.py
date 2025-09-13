@@ -1,9 +1,14 @@
 import datetime
 import random
+from itertools import cycle
+from sqlalchemy.orm.attributes import flag_modified
+
 from flask import (Blueprint, render_template, redirect, request, jsonify, 
-                   url_for,session,
+                   url_for,session,abort,
                    Response,current_app,flash)
 from flask_login import current_user, login_required
+from functools import wraps
+
 from sqlalchemy.orm import Session
 
 from app.models import (Location, Character, Team, Game, User, 
@@ -14,10 +19,22 @@ from app.api import api_bp
 
 from app.main import utils
 
+def admin_required(f):
+    """
+    Decorator that protects a route by checking for user authentication and admin status.
+    """
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        # Check if the current user is authenticated and is an admin
+        if not current_user.is_authenticated or not current_user.is_admin:
+            # Abort with a 403 Forbidden error if conditions are not met
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 
-
-
-@api_bp.route('/api/locations', methods=['POST'])
+@api_bp.route('/api/get_nearby_locations', methods=['POST'])
+# used to be /api/locations
 def get_nearby_locations():
     data = request.get_json()
     #lat, lon = data['latitude'], data['longitude']
@@ -320,3 +337,390 @@ def tile_list():
 
     tiles = utils.generate_tile_urls(min_lat, min_lng, max_lat, max_lng, zoom_levels, tile_url_template)
     return jsonify(tiles)
+
+# ============================================================
+# GAME
+# ============================================================
+
+def assign_locations_to_teams(game_id):
+    game = Game.query.get(game_id)
+    if not game:
+        raise ValueError(f"Game with ID {game_id} not found.")
+
+    teams = Team.query.filter_by(game_id=game_id).all()
+    if not teams:
+        raise ValueError(f"No teams found for game ID {game_id}.")
+    
+    # Check if 'routes' is defined in game.data
+    routes = None
+    num_locations_per_team=5
+    if game.data and isinstance(game.data, dict):
+        routes = game.data.get('routes')
+        num_locations_per_team = game.data.get('num_locations_per_team', num_locations_per_team)
+    
+    created_count = 0
+    if routes and isinstance(routes, list) and all(isinstance(r, list) for r in routes):
+        # Assign based on predefined routes
+        route_cycle = cycle(routes)  # Cycle through routes if there are more teams than routes
+        for team in teams:
+            route = next(route_cycle)
+            for loc_id in route:
+                exists = TeamLocationAssignment.query.filter_by(
+                    team_id=team.id, location_id=loc_id, game_id=game_id
+                ).first()
+                if not exists:
+                    assignment = TeamLocationAssignment(
+                        team_id=team.id,
+                        location_id=loc_id,
+                        game_id=game_id
+                    )
+                    db.session.add(assignment)
+                    created_count += 1
+    else:
+        # Fallback: Random assignment
+        all_location_ids = [loc.id for loc in Location.query.filter_by(game_id=game_id).all()]
+        for team in teams:
+            assigned = random.sample(all_location_ids, min(num_locations_per_team, len(all_location_ids)))
+            for loc_id in assigned:
+                exists = TeamLocationAssignment.query.filter_by(
+                    team_id=team.id, location_id=loc_id, game_id=game_id
+                ).first()
+                if not exists:
+                    assignment = TeamLocationAssignment(
+                        team_id=team.id,
+                        location_id=loc_id,
+                        game_id=game_id
+                    )
+                    db.session.add(assignment)
+                    created_count += 1
+
+    db.session.commit()
+    return f"Assigned {created_count} location(s) to teams in game {game_id}."
+
+
+@api_bp.route('/api/game/<int:game_id>/start_game', methods=['POST'])
+@admin_required
+def start_game(game_id):
+    game = Game.query.get(game_id)
+    if not game:
+        return jsonify({"success": False, "message": "Game not found"}), 404
+    
+    try:
+        # Delete existing assignments for this game
+        deleted_count = TeamLocationAssignment.query.filter_by(game_id=game_id).delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Failed to clear old assignments: {str(e)}"}), 500
+
+    try:
+        # Assign new locations
+        assign_locations_to_teams(game.id)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Failed to assign locations: {str(e)}"}), 500
+
+    return jsonify({
+        "success": True,
+        "message": f"Game '{game.name}' started and locations assigned!",
+        "game_id": game.id,
+        "deleted_assignments": deleted_count
+    }), 200
+
+@api_bp.route('/api/game/<int:game_id>/clear_assignments', methods=['POST'])
+#@login_required
+@admin_required
+def clear_assignments(game_id):
+    try:
+        # Delete all TeamLocationAssignment rows for this game
+        deleted_count = TeamLocationAssignment.query.filter_by(game_id=game_id).delete()
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Deleted all {deleted_count} team location assignments for game {game_id}."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": f"Failed to delete team location assignments: {str(e)}"
+        }), 500
+    
+
+@api_bp.route('/api/team/<int:team_id>/reset_locations', methods=['POST'])
+#@login_required
+@admin_required
+def reset_locations(team_id):
+    """
+    Reset all locations (TeamLocationAssignment) found flags and timestamps
+    for the current team and game. Debug only.
+    """
+    #team_id = request.json.get('team_id') or session.get('active_team_id')
+    if not team_id:
+        return jsonify({"error": "team_id is required"}), 400
+
+    team = Team.query.get(team_id)
+    if not team:
+        return jsonify({"error": f"No team found with id {team_id}"}), 404
+
+    # Reset all assignments for this team
+    assignments = TeamLocationAssignment.query.filter_by(team_id=team.id).all()
+    for a in assignments:
+        a.found = False
+        a.timestamp_found = None  # reset timestamp if you have one
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Reset {len(assignments)} location assignments for team {team.name} (id={team.id})"
+    })
+
+
+@api_bp.route('/api/game/state', methods=['GET'])
+@login_required
+def get_game_state():
+    game_id = request.args.get('game_id', type=int)
+    team_id = request.args.get('team_id', type=int)
+
+    if not game_id or not team_id:
+        return jsonify({"error": "Missing game_id or team_id"}), 400
+
+    # Query all locations for this game assigned to this team
+    assignments = TeamLocationAssignment.query.filter_by(
+        game_id=game_id,
+        team_id=team_id
+    ).order_by(TeamLocationAssignment.id).all()
+
+    locations_found = []
+    current_index = 0
+    for idx, a in enumerate(assignments):
+        locations_found.append({
+            "location_id": a.location_id,
+            "found": a.found,
+            "timestamp_found": a.timestamp_found.isoformat() if a.timestamp_found else None
+        })
+        if a.found:
+            current_index = idx + 1  # current_index points to next location to find
+
+    return jsonify({
+        "game_id": game_id,
+        "team_id": team_id,
+        "current_index": current_index,
+        "locations_found": locations_found
+    })
+
+# ====================================================================
+# LOCATION ADMIN
+# ====================================================================
+# ----------------------------------------------------------------------
+# 1. Get all locations for a game
+# GET /api/locations?game_id=1
+@api_bp.route('/api/locations', methods=['GET'])
+def get_game_locations():
+    game_id = request.args.get('game_id', type=int)
+    if not game_id:
+        return jsonify([])
+
+    locations = Location.query.filter_by(game_id=game_id).all()
+    return jsonify([
+        {
+            "id": loc.id,
+            "name": loc.name,
+            "clue_text": loc.clue_text,
+            "image_url": loc.image_url,
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+        } for loc in locations
+    ])
+
+# ----------------------------------------------------------------------
+# 2. Get / update a single location by ID
+# GET /api/location/123
+# PUT /api/location/123
+@api_bp.route('/api/location/<int:loc_id>', methods=['GET', 'PUT','DELETE'])
+@admin_required
+def location_detail(loc_id):
+    loc = Location.query.get_or_404(loc_id)
+
+    if request.method == 'GET':
+        return jsonify({
+            "id": loc.id,
+            "name": loc.name,
+            "clue_text": loc.clue_text,
+            "image_url": loc.image_url,
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+        })
+
+    elif request.method == 'PUT':
+        data = request.get_json()
+        loc.name = data.get("name", loc.name)
+        loc.clue_text = data.get("clue_text", loc.clue_text)
+        loc.image_url = data.get("image", loc.image_url)
+        loc.latitude = data.get("latitude", loc.latitude)
+        loc.longitude = data.get("longitude", loc.longitude)
+
+        db.session.commit()
+        return jsonify({"success": True, "message": "Location updated", "location": {
+            "id": loc.id,
+            "name": loc.name,
+            "clue_text": loc.clue_text,
+            "image_url": loc.image_url,
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+        }})
+
+    elif request.method == 'DELETE':
+        db.session.delete(loc)
+        db.session.commit()
+        return jsonify({"success": True, "message": f"Location {loc_id} deleted"})
+
+# ----------------------------------------------------------------------
+# 3. Add a new location
+# POST /api/locations
+# Body: { "game_id": 1, "name": "...", "clue_text": "...", "image": "...", "latitude": 0.0, "longitude": 0.0 }
+@api_bp.route('/api/locations', methods=['POST'])
+@admin_required
+def add_location():
+    data = request.get_json()
+    game_id = data.get("game_id")
+    if not game_id:
+        return jsonify({"success": False, "message": "game_id required"}), 400
+
+    new_loc = Location(
+        game_id=game_id,
+        name=data.get("name", "New Location"),
+        clue_text=data.get("clue_text", ""),
+        image_url=data.get("image", ""),
+        latitude=data.get("latitude", 0.0),
+        longitude=data.get("longitude", 0.0),
+    )
+    db.session.add(new_loc)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Location added", "location": {
+        "id": new_loc.id,
+        "name": new_loc.name,
+        "clue_text": new_loc.clue_text,
+        "image_url": new_loc.image_url,
+        "latitude": new_loc.latitude,
+        "longitude": new_loc.longitude,
+    }})
+
+# ====================================================================
+# ROUTES ADMIN
+# ====================================================================
+# ------------------ Get All Routes for a Game ------------------
+@api_bp.route('/api/game/<int:game_id>/routes', methods=['GET'])
+#@login_required
+def game_routes(game_id):
+    """
+    Return all routes for a given game.
+    """
+    game = Game.query.get_or_404(game_id)
+    game.data = game.data or {}
+    routes = game.data.get('routes', [])
+    return jsonify(routes=routes)
+
+# ------------------ Game Route Detail ------------------
+@api_bp.route('/api/game/<int:game_id>/route/<int:route_idx>', methods=['GET', 'PUT', 'DELETE'])
+@admin_required
+def game_route_detail(game_id, route_idx):
+    """
+    Manage a single route of a game.
+    - GET: return the route as list of location IDs
+    - PUT: update the route
+    - DELETE: remove the route
+    """
+    game = Game.query.get_or_404(game_id)
+    game.data = game.data or {}
+    routes = game.data.get('routes', [])
+
+    # Validate route index
+    if route_idx < 0 or route_idx >= len(routes):
+        return jsonify(error="Route index out of range"), 404
+
+    if request.method == 'GET':
+        return jsonify(route=routes[route_idx])
+
+    elif request.method == 'PUT':
+        payload = request.get_json()
+        new_route = payload.get('route')
+        if not isinstance(new_route, list):
+            return jsonify(error="Route must be a list of location IDs"), 400
+        # Optional: ensure all IDs are ints
+        try:
+            routes[route_idx] = [int(loc_id) for loc_id in new_route]
+        except ValueError:
+            return jsonify(error="All location IDs must be integers"), 400
+
+        game.data['routes'] = routes
+        db.session.commit()
+        return jsonify(success=True, route=routes[route_idx])
+
+    elif request.method == 'DELETE':
+        deleted_route = routes.pop(route_idx)
+        game.data['routes'] = routes
+        db.session.commit()
+        return jsonify(success=True, deleted_route=deleted_route)
+
+@api_bp.route('/api/game/<int:game_id>/routes', methods=['POST'])
+@admin_required
+def add_game_route(game_id):
+    """
+    Append a new route to a game.
+    Expects JSON: { "route": [location_id, location_id, ...] }
+    """
+    game = Game.query.get_or_404(game_id)
+    game.data = game.data or {}
+    routes = game.data.get('routes', [])
+
+    payload = request.get_json()
+    new_route = payload.get('route')
+    if not isinstance(new_route, list):
+        return jsonify(error="Route must be a list of location IDs"), 400
+
+    try:
+        new_route = [int(loc_id) for loc_id in new_route]
+    except ValueError:
+        return jsonify(error="All location IDs must be integers"), 400
+
+    routes.append(new_route)
+    game.data['routes'] = routes
+    db.session.commit()
+    return jsonify(success=True, route=new_route, route_index=len(routes)-1)
+
+@api_bp.route('/api/game/<int:game_id>/routes/all', methods=['POST'])
+@admin_required
+def save_all_routes(game_id):
+    """
+    Replaces all routes for a given game with the new list of routes.
+    Expects JSON: { "routes": [[loc_id, loc_id, ...], [loc_id, loc_id, ...], ...] }
+    """
+    game = Game.query.get_or_404(game_id)
+    payload = request.get_json()
+
+    if not payload or 'routes' not in payload:
+        return jsonify(error="Missing 'routes' in request body"), 400
+
+    new_routes = payload.get('routes')
+
+    if not isinstance(new_routes, list):
+        return jsonify(error="Routes must be a list"), 400
+
+    # Validate that all elements are lists of integers
+    validated_routes = []
+    try:
+        for route in new_routes:
+            if not isinstance(route, list):
+                return jsonify(error="All routes must be lists"), 400
+            validated_routes.append([int(loc_id) for loc_id in route])
+    except (ValueError, TypeError):
+        return jsonify(error="All location IDs must be integers"), 400
+
+    # Update the game data and commit to the database
+    game.data['routes'] = validated_routes
+
+    # Explicitly tell SQLAlchemy that the dictionary has been modified
+    flag_modified(game, "data")
+    
+    db.session.commit()
+
+    return jsonify(success=True, message="All routes saved successfully!", routes=validated_routes)

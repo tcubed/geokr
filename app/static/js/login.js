@@ -27,7 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (data.success) {
         // Optionally redirect after a short delay
-        setTimeout(() => { window.location.href = '/findloc'; }, 1000);
+        loginMessage.textContent = "Magic link sent! Check your email to log in.";
+        //setTimeout(() => { window.location.href = '/findloc'; }, 1000);
       } else if (data.queued) {
         alert("You are offline. Login request queued. Try again when back online.");
         localStorage.setItem('offlineEmail', email);

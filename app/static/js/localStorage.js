@@ -1,7 +1,14 @@
 // localStorage.js
 
-// SAVE STORAGE KEY SHOULD BE GENERATED DYNAMICALLY BASED ON GAME_DATA
-const STORAGE_KEY = `geo-game-state_${GAME_DATA.gameId}`; // OK
+// Pull lightweight globals from base.html
+const CONTEXT = window.GAME_CONTEXT || {};
+const gameId = CONTEXT.gameId || "default";
+const teamId = CONTEXT.teamId || null;
+
+// Optional page-specific heavy data
+const FINDLOC = window.FINDLOC_DATA || {}; // only defined on /findloc
+
+const STORAGE_KEY = `geo-game-state_${gameId}`;
 
 // GAMESTATE SHOULD BE MUTABLE, CLONE LOCATIONS TO AVOID MUTATING GAME_DATA
 // INITIALIZE gameState FROM LOCALSTORAGE OR TEMPLATE
@@ -9,12 +16,13 @@ const savedState = localStorage.getItem(STORAGE_KEY);
 const gameState = savedState 
   ? JSON.parse(savedState)
   : {
-      gameId: GAME_DATA.gameId,
-      teamId: GAME_DATA.teamId || null,
-      locations: window.GAME_DATA.locations,
-      currentIndex: window.GAME_DATA.nextIndex || 0
+      gameId: CONTEXT.gameId || "default",
+      teamId: CONTEXT.teamId || null,
+      // only include locations/currentIndex if available on this page:
+      locations: FINDLOC.locations || [],
+      currentIndex: FINDLOC.currentIndex || 0,
     };
-const gameId = GAME_DATA.gameId;
+//const gameId = GAME_DATA.gameId;
 
 // SAVE STATE TO LOCALSTORAGE
 function saveState() {
@@ -25,19 +33,19 @@ function saveState() {
   }
 }
 
-// LOAD STATE FROM LOCALSTORAGE OR FALLBACK TO GAME_DATA.nextIndex
+// LOAD STATE FROM LOCALSTORAGE OR FALLBACK TO GAME_DATA.currentIndex
 function loadState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const savedState = JSON.parse(saved);
-      Object.assign(gameState, savedState); // DO NOT REASSIGN, UPDATE PROPERTIES ONLY
+      Object.assign(gameState, JSON.parse(saved));
     } else {
-      gameState.currentIndex = GAME_DATA.nextIndex || 0; // DEFAULT TO SERVER VALUE
+      // default currentIndex if we have it
+      gameState.currentIndex = FINDLOC.currentIndex || 0;
     }
   } catch (err) {
     console.warn('Failed to load gameState from localStorage:', err);
-    gameState.currentIndex = GAME_DATA.nextIndex || 0; // ENSURE VALID DEFAULT
+    gameState.currentIndex = FINDLOC.currentIndex || 0;
   }
 }
 
@@ -46,12 +54,13 @@ function loadState() {
 // async function syncOfflineQueue() { ... } -> DELETE
 
 // EXPORT SINGLETONS
-export { gameState, gameId, saveState, loadState };
+export { gameId, gameState, saveState, loadState };
 
 // EXPOSE ON WINDOW FOR GLOBAL ACCESS
-window.gameState = gameState;
+//window.gameState = gameState;
 window.gameId = gameId;
 window.gameStorage = {
+  gameState,
   saveState,
   loadState
   // OFFLINE QUEUE FUNCTIONS ARE HANDLED IN offline-sync

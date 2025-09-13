@@ -1,7 +1,10 @@
+import os
+import imghdr
 from flask import (Blueprint, render_template, request, jsonify, Response,
-                   redirect, url_for, flash)
+                   redirect, url_for, flash,current_app)
 from flask_login import login_required
 from functools import wraps
+from sqlalchemy.orm.attributes import flag_modified
 from app.models import (db,
                         Team, team_game,
                         Game,Location, Character, )
@@ -169,15 +172,15 @@ def admin_api_characters():
             })
         return jsonify(result)
 
-@admin_bp.route('/api/locations')
-#@requires_auth
-def admin_api_locations():
-    from app.models import Location
-    game_id = request.args.get('game_id')
-    if not game_id:
-        return jsonify([])
-    locations = Location.query.filter_by(game_id=game_id).all()
-    return jsonify([{"id": loc.id, "name": loc.name} for loc in locations])
+# @admin_bp.route('/api/locations')
+# #@requires_auth
+# def admin_api_locations():
+#     from app.models import Location
+#     game_id = request.args.get('game_id')
+#     if not game_id:
+#         return jsonify([])
+#     locations = Location.query.filter_by(game_id=game_id).all()
+#     return jsonify([{"id": loc.id, "name": loc.name} for loc in locations])
 
 @admin_bp.route('/api/characters/<int:id>', methods=['PUT', 'DELETE'])
 @requires_auth
@@ -208,6 +211,28 @@ def admin_api_character_detail(id):
     
 
 
+
+# ====================================================================
+# LOCATION ADMIN
+# ====================================================================
+@admin_bp.route('/game_locations')
+#@requires_auth   # optionally add auth
+def manage_game_locations():
+    games = Game.query.order_by(Game.name).all()
+    return render_template('admin/game_locations.html', games=games)
+
+# ====================================================================
+# ROUTES ADMIN
+# ====================================================================
+
+@admin_bp.route('/game_routes')
+#@requires_auth   # optionally add auth
+def manage_game_routes():
+    games = Game.query.order_by(Game.name).all()
+    return render_template('admin/game_routes.html', games=games)
+
+# ----------------------------------------------------------------------
+# LEGACY
 @admin_bp.route('/copy_locations', methods=['GET', 'POST'])
 @login_required  # optionally add @admin_required if needed
 def copy_locations():
@@ -244,3 +269,91 @@ def copy_locations():
         return redirect(url_for('admin_cust.copy_locations'))
 
     return render_template('admin/copy_locations.html', games=games)
+
+
+#=============================================================================
+# IMAGES
+#=============================================================================
+# -------------------------------
+# GET available images (including subdirectories)
+# -------------------------------
+@admin_bp.route('/api/images', methods=['GET'])
+def get_available_images():
+    images_dir = os.path.join(current_app.root_path, 'static/images')
+    image_files = []
+
+    try:
+        for root, _, files in os.walk(images_dir):
+            for f in files:
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                    # Get the relative path from the static folder
+                    rel_path = os.path.relpath(os.path.join(root, f), current_app.root_path)
+                    image_files.append(f'/{rel_path.replace(os.path.sep, "/")}')
+        return jsonify(image_files)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/image-directories', methods=['GET'])
+def image_directories():
+    base_dir = os.path.join(current_app.root_path, 'static/images')
+    dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
+    return jsonify(dirs)
+
+# WITHOUT PIL
+# @admin_bp.route('/api/upload-image', methods=['POST'])
+# def upload_image():
+#     file = request.files.get('image')
+#     directory = request.form.get('directory', '').strip()
+#     filename = request.form.get('filename', '').strip()
+    
+#     if not file or not filename:
+#         return jsonify({"success": False, "message": "File and filename required"}), 400
+
+#     target_dir = os.path.join(current_app.root_path, 'static/images', directory)
+#     os.makedirs(target_dir, exist_ok=True)
+    
+#     file_path = os.path.join(target_dir, filename)
+#     file.save(file_path)
+    
+#     # Return relative path like 'gam1/newimage.png'
+#     return jsonify({"success": True, "path": f"{directory}/{filename}"})
+
+from PIL import Image
+
+@admin_bp.route('/api/upload-image', methods=['POST'])
+def upload_image():
+    file = request.files.get('image')
+    directory = request.form.get('directory', '').strip()
+    filename = request.form.get('filename', '').strip()
+    
+    if not file or not filename:
+        return jsonify({"success": False, "message": "File and filename required"}), 400
+
+    # Infer extension from uploaded file if missing
+    if not os.path.splitext(filename)[1]:
+        # Try to get from file's mimetype or content
+        ext = imghdr.what(file)  # returns 'jpeg', 'png', etc.
+        if ext == 'jpeg':
+            ext = 'jpg'
+        if ext:
+            filename += f".{ext}"
+        else:
+            return jsonify({"success": False, "message": "Cannot determine image type"}), 400
+
+
+    target_dir = os.path.join(current_app.root_path, 'static/images', directory)
+    os.makedirs(target_dir, exist_ok=True)
+    
+    # Use Pillow to open and resize the image
+    try:
+        img = Image.open(file)
+        max_dim = 640
+        img.thumbnail((max_dim, max_dim), Image.ANTIALIAS)  # preserves aspect ratio
+        file_path = os.path.join(target_dir, filename)
+        img.save(file_path)  # format inferred from filename extension
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Failed to process image: {e}"}), 500
+    
+    # Return relative path like 'gam1/newimage.png'
+    return jsonify({"success": True, "path": f"{directory}/{filename}"})
+
