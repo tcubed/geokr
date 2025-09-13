@@ -47,7 +47,8 @@ def create_app():
     app.config['MAIL_USE_TLS'] = True
     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-    app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_PASSWORD'))
+    #app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_PASSWORD'))
+    app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_USERNAME'))
 
     # Disable static file caching for development
     # Flask's default is 12 hours (43200 seconds)
