@@ -25,7 +25,7 @@ const APP_SHELL_FILES = [
   '/static/js/localStorage.js',
   '/static/js/account.js',
   // DEBUG
-  '/static/js/debug_utils.js',
+  //'/static/js/debug_utils.js',
   //'/static/js/game_locations.js',
 
   //'/static/js/app.js',
@@ -243,7 +243,8 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(event.request.url);
   console.log('[SW] Fetch event for:', url.pathname, 'method:', event.request.method);
-  const exactBypass = ['/', '/account', '/login', '/register', '/magic-login', '/logout','/game_admin'];
+  const exactBypass = ['/', '/account', '/login', '/register', '/magic-login', 
+    '/logout','/game_admin', '/register_or_login'];
   const prefixBypass = ['/admin'];
 
   if (event.request.method !== 'GET' && event.request.method !== 'POST') {

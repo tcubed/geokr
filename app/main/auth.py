@@ -144,36 +144,48 @@ def login():
 @auth_bp.route('/register_or_login', methods=['GET', 'POST'])
 def register_or_login():
     if request.method == 'POST':
-        email = request.form.get('email').lower().strip()
-        display_name = request.form.get('display_name')
-        
+        # Check for JSON data first (from fetch requests)
+        if request.is_json:
+            data = request.json
+            email = data.get('email', '').lower().strip()
+            display_name = data.get('display_name', '')
+        else:
+            email = request.form.get('email', '').lower().strip()
+            display_name = request.form.get('display_name', '')
+
         if not email or not display_name:
-            flash("Please provide both email and display name.", "warning")
-            return redirect(url_for('auth.login'))
+            msg = "Please provide both email and display name."
+            if request.is_json:
+                return jsonify(success=False, message=msg)
+            flash(msg, "warning")
+            return redirect(url_for('auth.register_or_login'))
 
         # Check for existing user
         user = User.query.filter_by(email=email).first()
 
-        if user:
-            # Login existing user
-            flash(f"Welcome back, {user.display_name}!", "success")
-        else:
-            # Create a new user
+        if not user:
             user = User(email=email, display_name=display_name)
             db.session.add(user)
             db.session.commit()
             assign_user_role(user)
-            flash("Registration successful. You are now logged in.", "success")
             
         login_user(user, remember=True)
         
-        # Generate and store a long-lived token
-        resume_token = generate_resume_token(user.email)
+        # This part of your code seems to be using an old magic-link flow
+        # It should be updated to return a JSON response if the request was a fetch
+        if request.is_json:
+            return jsonify(success=True, message=f"Welcome, {user.display_name}! Login successful.")
+        else:
+            flash(f"Welcome back, {user.display_name}!", "success")
+            return redirect(url_for("main.findloc"))
         
-        # Serve a page that stores the token and redirects
-        return render_template("user/magic_success.html", 
-                               resume_token=resume_token,
-                               display_name=user.display_name)
+        # # Generate and store a long-lived token
+        # resume_token = generate_resume_token(user.email)
+        
+        # # Serve a page that stores the token and redirects
+        # return render_template("user/magic_success.html", 
+        #                        resume_token=resume_token,
+        #                        display_name=user.display_name)
     
     # For GET requests, show the combined form
     return render_template('user/login.html')
@@ -242,7 +254,7 @@ def magic_login():
 def logout():
     logout_user()
     flash('Logged out.', 'success')
-    return redirect(url_for('auth.login'))
+    return redirect(url_for('auth.register_or_login'))
 
 
 # =============================================
