@@ -81,18 +81,24 @@ async function fetchWithStrategy(request, strategy, cacheName, fallback = null, 
   }
 
   const cached = await cache.match(cacheKey);
-  if (strategy === 'cache-first' && cached) return cached;
+  if (strategy === 'cache-first' && cached) {
+    console.log('[SW] Cache-first hit:', cacheKey);
+    return cached;
+  }
 
   
   // detect if request is cross-origin
   const isCrossOrigin = new URL(request.url).origin !== self.location.origin;
+  //const fetchOptions = isCrossOrigin ? {} : { credentials: 'same-origin' };
 
   // If offline and same-origin, serve from cache only
-  if (!self.navigator.onLine && !isCrossOrigin) {
-    if (cached) return cached;
-    if (fallback) return typeof fallback === 'string' ? caches.match(fallback) : fallback;
-    return new Response('Offline', { status: 503 });
-  }
+  // FIX: navigator.onLine inside SW is undefined; use try/fetch catch instead
+  // so don’t rely on self.navigator.onLine here
+  // if (!self.navigator.onLine && !isCrossOrigin) {
+  //   if (cached) return cached;
+  //   if (fallback) return typeof fallback === 'string' ? caches.match(fallback) : fallback;
+  //   return new Response('Offline', { status: 503 });
+  // }
 
   // const fetchOptions = {
   //   credentials: isCrossOrigin ? 'omit' : 'same-origin',
@@ -101,50 +107,109 @@ async function fetchWithStrategy(request, strategy, cacheName, fallback = null, 
   const fetchOptions = isCrossOrigin ? {} : { credentials: 'same-origin', redirect: 'follow' };
       
 
+  // const doFetch_OLD = async () => {
+  //   try {
+  //     console.log('[SW] Fetching:', request.url);
+  //     const response = await fetch(request, fetchOptions);
+  //     console.log('[SW] Fetch response:', response.status, request.url);
+
+  //     // Only follow redirects manually for same-origin
+  //     if (!isCrossOrigin && response.status >= 300 && response.status < 400) {
+  //       const location = response.headers.get('Location');
+  //       if (location) {
+  //         console.log('[SW] Following redirect to', location);
+  //         const redirected = await fetch(location, fetchOptions);
+  //         if (redirected.ok || redirected.type === 'opaque') {
+  //           await cache.put(cacheKey, redirected.clone());
+  //           console.log('[SW] Cached after redirect:', cacheKey);
+  //         }
+  //         return redirected;
+  //       }
+  //     }
+
+  //     // Follow redirect manually
+  //     // if (response.status >= 300 && response.status < 400) {
+  //     //   const location = response.headers.get('Location');
+  //     //   if (location) return fetch(location, { credentials: 'same-origin' });
+  //     // }
+
+  //     // Cache opaque responses too
+  //     if (response.ok || response.type === 'opaque') {
+  //       await cache.put(cacheKey, response.clone());
+  //       console.log('[SW] Cached:', cacheKey);
+  //     } else {
+  //       console.warn('[SW] Not caching non-ok response', response.status);
+  //     }
+  //     return response;
+  //   } catch (err) {
+  //     console.warn('[SW] Fetch failed:', request.url, err);
+  //     if (cached) {
+  //       console.log('[SW] Returning cached response for:', cacheKey);
+  //       return cached;
+  //     }
+  //     if (fallback) {
+  //       try {
+  //         console.log('[SW] Using fallback for:', request.url);
+  //         return typeof fallback === 'string' ? (await caches.match(fallback)) || (await fetch(fallback)) : fallback;
+  //         //return typeof fallback === 'string' ? (await caches.match(fallback)) || fetch(fallback) : fallback;
+  //       } catch (err2) {
+  //         console.warn('[SW] Fallback fetch failed', err2);
+  //         return new Response('Offline', { status: 503 });
+  //       }
+  //     }
+  //     // FIX: always return a Response even if no cache/fallback
+  //     return new Response('Offline', { status: 503 });
+  //   }
+  // };
+
   const doFetch = async () => {
     try {
       console.log('[SW] Fetching:', request.url);
-      const response = await fetch(request, fetchOptions);
-      console.log('[SW] Fetch response:', response.status, request.url);
 
-      // Only follow redirects manually for same-origin
-      if (!isCrossOrigin && response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('Location');
-        if (location) {
-          console.log('[SW] Following redirect to', location);
-          return fetch(location, { credentials: 'same-origin', redirect: 'follow' });
-        }
-      }
+      // Let the browser handle redirects automatically:
+      const response = await fetch(request, {
+        credentials: isCrossOrigin ? 'omit' : 'same-origin',
+        redirect: 'follow'
+      });
 
-      // Follow redirect manually
-      // if (response.status >= 300 && response.status < 400) {
-      //   const location = response.headers.get('Location');
-      //   if (location) return fetch(location, { credentials: 'same-origin' });
-      // }
+      console.log('[SW] Fetch response:', response.status, request.url,
+        'redirected?', response.redirected, 'final URL:', response.url);
 
-      // Cache opaque responses too
+      // Cache the final response if OK or opaque
       if (response.ok || response.type === 'opaque') {
         await cache.put(cacheKey, response.clone());
         console.log('[SW] Cached:', cacheKey);
       }
+
       return response;
     } catch (err) {
       console.warn('[SW] Fetch failed:', request.url, err);
+
+      // Return cached version if available
       if (cached) {
         console.log('[SW] Returning cached response for:', cacheKey);
         return cached;
       }
+
+      // Use fallback if specified
       if (fallback) {
         try {
           console.log('[SW] Using fallback for:', request.url);
-          return typeof fallback === 'string' ? await caches.match(fallback) || await fetch(fallback) : fallback;
+          return typeof fallback === 'string'
+            ? (await caches.match(fallback)) || fetch(fallback)
+            : fallback;
         } catch (err2) {
           console.warn('[SW] Fallback fetch failed', err2);
           return new Response('Offline', { status: 503 });
         }
       }
+
+      // Default offline response
+      return new Response('Offline', { status: 503 });
     }
   };
+
+
 
   if (strategy === 'cache-first') {
     return cached || doFetch();
@@ -282,7 +347,7 @@ self.addEventListener('fetch', event => {
     // Game API GET caching
     if (url.pathname.startsWith('/api/')) {
       console.log('[SW] API GET request:', url.href);
-      event.respondWith(fetchWithStrategy(event.request,'network-first',APP_CACHE,
+      event.respondWith(fetchWithStrategy(event.request,'network-first',API_CACHE,
           new Response('{}', { headers: { 'Content-Type': 'application/json' } }))
       );
       return;

@@ -1,6 +1,9 @@
 #
 .env
 
+# uploaded images
+/app/static/images/uploads/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -19,3 +22,5 @@ instance/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+

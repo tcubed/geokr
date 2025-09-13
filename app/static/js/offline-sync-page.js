@@ -1,4 +1,4 @@
-// /static/js/offline-sync.js
+// /static/js/offline-sync-page.js
 
 (function (root, findLocUtils) { // Add findLocUtils as a parameter
     const defaultDB = root.offlineDB;
@@ -27,6 +27,15 @@
     const doQueue = async () => {
       console.log("doQueue called, offlineDB=", db);
 
+      // Convert body if it's FormData. This ensures it's storable.
+      let bodyToStore = update.body;
+      if (update.body instanceof FormData) {
+          // We're converting a FormData object to a regular object.
+          // This preserves the data but loses the file reference, which is fine
+          // since the service worker will handle the actual file transfer.
+          bodyToStore = Object.fromEntries(update.body.entries());
+      }
+
       // ✅ Update badge immediately after queuing
       if (typeof root.updatePendingBadge === 'function') {
           root.updatePendingBadge();
@@ -44,15 +53,19 @@
       //   await db.deleteUpdate(update.id);
       //   update.id = await db.addUpdate(update);
       // }
-      if (!update.id) {
-          update.id = await db.addUpdate(update);
-          console.log('[Badge] Queued update, id:', update.id);
+
+      const newUpdate = { ...update, body: bodyToStore };
+
+      // Your existing logic for queuing the update
+      if (!newUpdate.id) {
+          newUpdate.id = await db.addUpdate(newUpdate);
+          console.log('[Badge] Queued update, id:', newUpdate.id);
           if (typeof root.updatePendingBadge === 'function') {
               root.updatePendingBadge();
           }
       }
 
-      onQueued && onQueued(update);
+      onQueued && onQueued(newUpdate);
 
       // Register background sync if available
       if (!IS_SERVICE_WORKER && 'serviceWorker' in navigator && 'SyncManager' in window) {
@@ -60,7 +73,7 @@
               const reg = await navigator.serviceWorker.ready;
 
               // Use teamId from the update itself
-              const tid = update.body?.team_id;
+              const tid = newUpdate.body?.team_id;
               const syncTag = tid ? `sync-found-locations-${tid}` : 'sync-found-locations';
               await reg.sync.register(syncTag);
           } catch (err) {
@@ -75,11 +88,26 @@
       try {
         update.attempts += 1;
         update.lastTried = Date.now(); // attempt timestamp
-        const response = await fetch(update.url, {
-          method: update.method || 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(update.body)
-        });
+
+        // CRITICAL FIX 2: Correctly configure the fetch request for JSON or FormData
+        let fetchOptions;
+        if (update.body instanceof FormData) {
+            // If the body is FormData, don't set 'Content-Type'.
+            // The browser will handle it correctly with the boundary.
+            fetchOptions = {
+                method: update.method || 'POST',
+                body: update.body
+            };
+        } else {
+            // For all other cases (e.g., direct validation), send JSON.
+            fetchOptions = {
+                method: update.method || 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(update.body)
+            };
+        }
+
+        const response = await fetch(update.url, fetchOptions);
 
         // NEW: HANDLE 409 DELETED RECORD RESPONSE
         if (response.status === 409 && update.id != null) {

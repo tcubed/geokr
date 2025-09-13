@@ -156,6 +156,7 @@ class TeamLocationAssignment(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
+    order_index=db.Column(db.Integer, nullable=False, default=0)
 
     # Optional: track completion
     found = db.Column(db.Boolean, default=False)

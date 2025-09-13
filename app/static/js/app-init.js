@@ -33,6 +33,14 @@ export async function startApp() {
     // 2️⃣ Render the UI from the locally loaded state immediately
     renderCluesFromState();
 
+    // 3. Set up the single, delegated event listener for all validation buttons.
+    // This is the CRUCIAL part. This must only be called ONCE.
+    setupValidationButtons();
+
+    // 4. Handle offline updates and sync logic
+    // This part should not call setupValidationButtons again.
+    // It should call renderCluesFromState() to update the UI.
+
     // 2️⃣ Update pending offline updates
     updatePendingBadge();
 
@@ -53,9 +61,6 @@ export async function startApp() {
       // After sync, re-render to reflect any server-side changes
       renderCluesFromState();
     }
-
-    // 5️⃣ Setup buttons/UI
-    setupValidationButtons();
 
     // 6️⃣ Listen for future online events
     window.addEventListener('online', async () => {

@@ -364,7 +364,7 @@ def assign_locations_to_teams(game_id):
         route_cycle = cycle(routes)  # Cycle through routes if there are more teams than routes
         for team in teams:
             route = next(route_cycle)
-            for loc_id in route:
+            for i, loc_id in enumerate(route):
                 exists = TeamLocationAssignment.query.filter_by(
                     team_id=team.id, location_id=loc_id, game_id=game_id
                 ).first()
@@ -372,7 +372,8 @@ def assign_locations_to_teams(game_id):
                     assignment = TeamLocationAssignment(
                         team_id=team.id,
                         location_id=loc_id,
-                        game_id=game_id
+                        game_id=game_id,
+                        order_index=i  # Assign the order_index
                     )
                     db.session.add(assignment)
                     created_count += 1
@@ -381,7 +382,7 @@ def assign_locations_to_teams(game_id):
         all_location_ids = [loc.id for loc in Location.query.filter_by(game_id=game_id).all()]
         for team in teams:
             assigned = random.sample(all_location_ids, min(num_locations_per_team, len(all_location_ids)))
-            for loc_id in assigned:
+            for i, loc_id in enumerate(assigned):
                 exists = TeamLocationAssignment.query.filter_by(
                     team_id=team.id, location_id=loc_id, game_id=game_id
                 ).first()
@@ -389,7 +390,8 @@ def assign_locations_to_teams(game_id):
                     assignment = TeamLocationAssignment(
                         team_id=team.id,
                         location_id=loc_id,
-                        game_id=game_id
+                        game_id=game_id,
+                        order_index=i # Assign the order_index
                     )
                     db.session.add(assignment)
                     created_count += 1

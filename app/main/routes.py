@@ -1,8 +1,10 @@
 import os
 import time
 import random
+import json
 from datetime import datetime, timedelta
 from itertools import cycle
+from PIL import Image
 
 #from datetime import timedelta
 from flask import (Blueprint, render_template, redirect, request, jsonify, 
@@ -191,7 +193,11 @@ def findloc():
 
     #return render_template('main.html', team=team, game=game,actions=actions)
     # 🧠 Fetch the locations assigned to this team
-    assignments = TeamLocationAssignment.query.filter_by(team_id=team.id).all()
+    assignments = (
+        TeamLocationAssignment.query
+        .filter_by(team_id=team.id)
+        .order_by(TeamLocationAssignment.order_index)
+        .all())
     
     locations = []
     current_index = 0
@@ -221,6 +227,7 @@ def findloc():
     if all(loc['found'] for loc in locations):
         current_index = len(locations)-1
 
+    
     # If all locations are found, set to last index
     # if current_index is None:
     #     current_index = len(assignments) - 1
@@ -259,7 +266,7 @@ def findloc():
                            current_index=current_index,
                            completion_duration=formatted_completion_time,
                            enable_geolocation=False,
-                           enable_selfie=False,
+                           enable_selfie=True,
                            enable_image_verify=False,
                            enable_qr_scanner=False,
                            #games=games,
@@ -455,19 +462,31 @@ def account():
 @main_bp.route('/api/joingame', methods=['POST'])
 @login_required
 def api_joingame():
-    #data = request.get_json()
+    """Join an existing team or create a new team for a game.
+    Returns JSON indicating success and the user's team_id.
+    If already on a team, returns success with current team_id.
+    """
+    print("[api_joingame] current_user:", current_user.is_authenticated)
+    
     start_time=time.time()
     data = request.get_json(silent=True)
     print(f"[api_joingame] DEBUG: Data received from request.get_json(): {data}")
+    current_app.logger.debug("[api_joingame] Data: %s", data)
     if not data:
         print("[api_joingame] DEBUG: Data is None. Returning 400.")
         return jsonify({"success": False, "message": "Missing or invalid JSON data"}), 400
 
-
-    game_id = data.get('game_id')
-    team_id = data.get('team_id')
-    new_team_name = data.get('new_team_name', '').strip()
-    print(f"[api_joingame] DEBUG: new_team_name is: {new_team_name}")
+    try:
+        # game_id = data.get('game_id')
+        # team_id = data.get('team_id')
+        # new_team_name = data.get('new_team_name', '').strip()
+        game_id = int(data.get('game_id')) if data.get('game_id') else None
+        team_id = int(data.get('team_id')) if data.get('team_id') else None
+        new_team_name = (data.get('new_team_name') or '').strip()
+        print(f"[api_joingame] DEBUG: new_team_name is: {new_team_name}")
+    except Exception as e:
+        current_app.logger.exception("Error joining game")
+        return jsonify({"success": False, "message": str(e)}), 500
 
     if not game_id:
         return jsonify({"success": False, "message": "Missing game_id"}), 400
@@ -481,21 +500,29 @@ def api_joingame():
         .first()
     )
 
+    if existing_membership:
+        # 🌟 Already on a team: treat as success, send team info
+        return jsonify({
+            "success": True,
+            "team_id": existing_membership.team_id,
+            "already_on_team": True,
+            "message": f"You are already on team '{existing_membership.team.name}'."
+        })
+    
     if team_id:  # Join existing team
-        if existing_membership:
-            return jsonify({"success": False, "message": "Already on a team in this game."}), 403
-
         membership = TeamMembership(user_id=current_user.id, team_id=team_id)
         db.session.add(membership)
         db.session.commit()
         session['active_team_id'] = membership.team_id
         print(f"[api_joingame] join existing team: {time.time()-start_time:.4f}s")
-        return jsonify({"success": True, "team_id": team_id, "message": "Joined team successfully."})
-
+        return jsonify({
+            "success": True,
+            "team_id": team_id,
+            "already_on_team": False,
+            "message": "Joined team successfully."
+        })
+    
     elif new_team_name:  # Create new team
-        if existing_membership:
-            return jsonify({"success": False, "message": "Already on a team in this game."}), 403
-
         # Check for team name uniqueness before creating
         if Team.query.filter_by(game_id=game_id, name=new_team_name).first():
             return jsonify({"success": False, "message": "Team name already exists."}), 409
@@ -513,8 +540,13 @@ def api_joingame():
 
         print(f"[api_joingame] create new team: {time.time()-start_time:.4f}s")
 
-        return jsonify({"success": True, "team_id": team.id, "message": "Created team and joined successfully."})
-
+        return jsonify({
+            "success": True,
+            "team_id": team.id,
+            "already_on_team": False,
+            "message": "Created team and joined successfully."
+        })
+    
     print(f"[api_joingame] send back, need to do something: {time.time()-start_time:.4f}s")
     return jsonify({"success": False, "message": "Must select or create a team."}), 400
 
@@ -598,14 +630,50 @@ def location(location_id):
 @main_bp.route('/api/location/found', methods=['POST'])
 @login_required
 def mark_location_found():
-    data = request.get_json()
+    # --- Data and File Handling Section ---
+    photo = None
+    data = {}
+    if 'photo' in request.files:
+        photo = request.files['photo']
+        if photo.filename == '':
+            current_app.logger.error("No image file provided, but 'photo' key exists.")
+            return jsonify({"error": "No image file provided"}), 400
+        
+        # All other data comes from the form
+        try:
+            # Flask's request.form is a CombinedMultiDict, which we can treat like a dictionary
+            # It will have a key 'data' containing the JSON string
+            json_data_str = request.form.get('data')
+            if json_data_str:
+                data = json.loads(json_data_str)
+                current_app.logger.info("Successfully parsed JSON data from multipart form.")
+            else:
+                current_app.logger.error("Multipart request is missing the 'data' key.")
+                return jsonify({"error": "Missing required data payload"}), 400
+        except json.JSONDecodeError:
+            current_app.logger.error("Invalid JSON data in multipart request.")
+            return jsonify({"error": "Invalid JSON payload"}), 400
+
+    else:
+        # Fallback for non-image submissions
+        try:
+            data = request.get_json()
+            current_app.logger.info(f"Request is JSON. Payload: {data}")
+        except Exception as e:
+            current_app.logger.error(f"Failed to parse JSON: {e}")
+            return jsonify({"error": "Invalid JSON"}), 400
+
+    # --- Initial Validation ---
     team_id = data.get('team_id')
     location_id = data.get('location_id')
     game_id = data.get('game_id')
+    method = data.get('method')
 
-    if not all([team_id, location_id, game_id]):
+    if not all([team_id, location_id, game_id,method]):
+        current_app.logger.error(f"Missing required parameters. Data: {data}")
         return jsonify({"error": "Missing required parameters"}), 400
 
+    # --- Database Operations ---
     cleanup_tombstones()  # remove expired tombstones
 
     key = (team_id, location_id, game_id)
@@ -637,6 +705,44 @@ def mark_location_found():
             tla.found = True
             tla.timestamp_found = datetime.utcnow()
 
+    # Handle the image submission if applicable
+    if method == 'selfie' and photo:
+        current_app.logger.info(f"Processing selfie for team {team_id}, location {location_id}.")
+        # 1. Sanitize filename & define path
+        filename = secure_filename(photo.filename)
+        # Generate a unique filename to avoid collisions
+        unique_filename = f"{team_id}-{location_id}-{datetime.utcnow().timestamp()}-{filename}"
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        # 2. Process and save the image
+        try:
+            from io import BytesIO
+            img_stream = BytesIO(photo.read())
+            img = Image.open(img_stream)
+            max_dim = 640
+            img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+            img.save(filepath)
+            current_app.logger.info(f"Image saved successfully to {filepath}")
+        except Exception as e:
+            db.session.rollback() # Rollback any changes
+            current_app.logger.error(f"Image processing or saving failed: {e}")
+            return jsonify({"success": False, "message": f"Failed to process image: {e}"}), 500
+
+        # 3. Update the Team's .data attribute
+        team = Team.query.filter_by(id=team_id).first()
+        if team:
+            try:
+                team_data = json.loads(team.data) if team.data else {}
+            except json.JSONDecodeError:
+                current_app.logger.warning(f"Invalid JSON in team {team_id} data field. Resetting.")
+                team_data = {}
+            if 'selfies' not in team_data:
+                team_data['selfies'] = {}
+            team_data['selfies'][location_id] = filepath
+            team.data = json.dumps(team_data)
+            current_app.logger.info(f"Updated team {team_id} data with selfie path.")
+
+
     db.session.commit()
 
     # Compute current_index for client display
@@ -645,6 +751,7 @@ def mark_location_found():
         .filter_by(team_id=team_id, game_id=game_id, found=True).scalar()
     current_index = max(0, found_count - 1)
 
+    current_app.logger.info("Returning success response.")
     return jsonify({
         "success": True,
         "team_id": team_id,

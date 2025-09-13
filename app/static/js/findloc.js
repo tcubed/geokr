@@ -1,7 +1,7 @@
 // findloc.js (progressive reveal)
 import { gameState, loadState, saveState } from './localStorage.js';
 import { setupValidationButtons } from './validate.js'; // You'll need to call this after rendering
-
+import { showToast } from './common-ui.js';
 
 // Get a safe reference to the game state
 export function getGameState() {
@@ -24,7 +24,6 @@ export function initGame() {
         console.log('[Findloc] gameState initialized from server data:', window.gameState);
     }
 }
-
 
 /**
  * Applies an optimistic offline UI update after a user action.
@@ -101,91 +100,6 @@ export function applyGameUpdate(data) {
     }
 }
 
-// export function applyGameUpdate(data) {
-//   console.log('applyGameUpdate:', data);
-//   if (!data) return;
-
-//   const location_id = data.locationId || data.location_id;
-//   if (!location_id) {
-//     console.warn('No locationId in update data:', data);
-//     return;
-//   }
-
-//   const gs = getGameState();
-//   if (!gs) {
-//     console.warn('No gameState available');
-//     return;
-//   }
-
-//   // Find the location in the local state and update it
-//   const foundIndex = gs.locations.findIndex(loc => String(loc.id) === String(location_id)); // Changed locationId to location_id
-  
-//   if (foundIndex > -1) {
-//     gs.locations[foundIndex].found = true;
-//     gs.currentIndex = foundIndex + 1;
-//     saveState();
-//   } else {
-//     console.warn(`Location with ID ${location_id} not found in gameState.`);
-//   }
-
-//   // Now, re-render the entire UI based on the new state.
-//   renderCluesFromState();
-// }
-
-// export function applyOfflineUI(locationId) {
-//   const el = document.querySelector(`[data-location-id="${locationId}"]`);
-//   if (el) el.classList.add('found-offline');
-
-//   const statusEl = document.querySelector('#status');
-//   if (statusEl) statusEl.textContent = 'Progress saved offline';
-
-//   advanceUI(locationId); // reuse same accordion logic
-// }
-
-function advanceUI(locationId) {
-  const gs = getGameState();
-  if (!gs || !gs.locations) return;
-
-  // close current
-  const foundCollapse = document.getElementById(`collapse-${locationId}`);
-  const foundButton = document.querySelector(`button[data-bs-target="#collapse-${locationId}"]`);
-  if (foundCollapse) {
-    foundCollapse.classList.remove('show');
-    foundCollapse.setAttribute('aria-expanded', 'false');
-  }
-  if (foundButton) {
-    foundButton.classList.add('collapsed');
-    foundButton.setAttribute('aria-expanded', 'false');
-  }
-
-  // open next
-  revealNextClue(gs.currentIndex);
-}
-
-function revealNextClue(clueIndex) {
-  const nextItem = document.querySelector(`.accordion-item[data-clue-index="${clueIndex}"]`);
-  if (!nextItem) {
-    console.warn(`No accordion item found for index ${clueIndex}`);
-    return;
-  }
-
-  nextItem.style.display = ''; // restores default display
-  const nextCollapse = nextItem.querySelector('.accordion-collapse');
-  const nextButton = nextItem.querySelector('.accordion-button');
-
-  if (nextCollapse) {
-    nextCollapse.classList.add('show');
-    nextCollapse.setAttribute('aria-expanded', 'true');
-  }
-  if (nextButton) {
-    nextButton.classList.remove('collapsed');
-    nextButton.setAttribute('aria-expanded', 'true');
-  }
-
-}
-
-
-
 // Sync DOM with current gameState
 export function updateClueVisibility() {
   const gs = getGameState();
@@ -196,32 +110,6 @@ export function updateClueVisibility() {
   });
 }
 
-// Show/hide clue cards based on currentIndex
-function revealUnlockedClues() {
-  const cards = document.querySelectorAll('.clue-card');
-  const gameState = root.gameState;
-  if (!gameState) return;
-  cards.forEach((card, idx) => {
-    card.style.display = idx <= gameState.currentIndex ? '' : 'none';
-  });
-}
-
-// Render clues from current gameState
-// export function renderCluesFromState_legacy() {
-//   const container = document.querySelector('#clues-container');
-//   const gs = getGameState();
-//   if (!container || !gs) return;
-
-//   container.innerHTML = '';
-//   gs.locations.forEach((loc, idx) => {
-//     const card = document.createElement('div');
-//     card.className = 'clue-card';
-//     card.dataset.clueIndex = idx;
-//     card.textContent = loc.clue_text;
-//     card.style.display = idx <= gs.currentIndex ? '' : 'none';
-//     container.appendChild(card);
-//   });
-// }
 
 export function updateUIFromState() {
     renderCluesFromState();
@@ -250,6 +138,9 @@ export function renderCluesFromState() {
     // The current clue should be expanded; others are collapsed.
     const isExpanded = isCurrent;
 
+    const selfieBtnId = `btn-validate-selfie-${loc.id}`;
+    const geoBtnId = `btn-validate-geo-${loc.id}`;
+
     const cardHtml = `
       <div class="accordion-item clue-card ${isFound ? 'found-clue' : ''}" 
            data-clue-index="${idx}"
@@ -272,7 +163,7 @@ export function renderCluesFromState() {
           <div class="accordion-body">
             ${loc.description ? `<p>${loc.description}</p>` : ''}
             ${loc.image_url ? `
-              <div class="location-card position-relative mb-3">
+              <div class="location-image-container position-relative mb-3">
                 <img src="${loc.image_url}" alt="${loc.name}" class="card-img-top" style="max-width: 300px;">
               </div>
             ` : ''}
@@ -281,16 +172,35 @@ export function renderCluesFromState() {
               <div id="map-${loc.id}" class="map-container"
                    data-lat="${loc.latitude}" data-lon="${loc.longitude}" style="height: 200px;"></div>
             ` : ''}
+
             <div id="validation-methods">
+
               <button class="btn btn-primary btn-validate-direct" 
                       data-location-id="${loc.id}"
                       data-clue-index="${idx}">
                   Mark Directly
               </button>
+
+              ${window.GAME_DATA.enable_selfie ? `
+                    <button id="btn-validate-selfie-${loc.id}" 
+                            class="btn btn-primary btn-validate-selfie"
+                            data-location-id="${loc.id}">
+                        Take Selfie
+                    </button>
+                ` : ''}
+
               
-              ${window.GAME_DATA.enable_geolocation ? `<button id="btn-validate-geo" class="btn btn-primary mt-2">Use Location</button>` : ''}
+              ${window.GAME_DATA.enable_geolocation ? `
+                <button class="btn btn-primary btn-validate-geo"
+                        data-location-id="${loc.id}">
+                  Use Location
+                </button>` : ''}
+              
+              
               ${window.GAME_DATA.enable_image_verify ? `
-                <button id="btn-validate-image" class="btn btn-primary mt-2">Match Image</button>
+                <button id="btn-validate-image" class="btn btn-primary"
+                  data-location-id="${loc.id}">
+                Match Image</button>
                 <div>
                   <h1>Find the Clue</h1>
                   <div id="container">
@@ -303,14 +213,16 @@ export function renderCluesFromState() {
                 </div>
               ` : ''}
               ${window.GAME_DATA.enable_qr_scanner ? `
-                <button id="btn-validate-qr" class="btn btn-primary mt-2">Scan QR Code</button>
+                <button id="btn-validate-qr" class="btn btn-primary" 
+                  data-location-id="${loc.id}">
+                Scan QR Code</button>
                 <div id="qr-container">
                   <video id="qr-video" style="width: 100%; max-width: 400px;"></video>
                   <canvas id="qr-canvas" style="display: none;"></canvas>
                   <p id="qr-result">Awaiting scan...</p>
                 </div>
               ` : ''}
-              ${window.GAME_DATA.enable_selfie ? `<button id="btn-validate-selfie" class="btn btn-primary mt-2">Take Selfie</button>` : ''}
+              
             </div>
           </div>
         </div>
@@ -319,9 +231,6 @@ export function renderCluesFromState() {
 
     container.insertAdjacentHTML('beforeend', cardHtml);
   });
-  
-  // This must be called after the DOM is rebuilt
-  setupValidationButtons();
 }
 
 // Clear offline queue
@@ -378,3 +287,117 @@ window.findLocUtils = {
   getGameState: getGameState, // You might need this too
   saveState: saveState // You might need this too
 };
+
+
+
+// export function applyGameUpdate(data) {
+//   console.log('applyGameUpdate:', data);
+//   if (!data) return;
+
+//   const location_id = data.locationId || data.location_id;
+//   if (!location_id) {
+//     console.warn('No locationId in update data:', data);
+//     return;
+//   }
+
+//   const gs = getGameState();
+//   if (!gs) {
+//     console.warn('No gameState available');
+//     return;
+//   }
+
+//   // Find the location in the local state and update it
+//   const foundIndex = gs.locations.findIndex(loc => String(loc.id) === String(location_id)); // Changed locationId to location_id
+  
+//   if (foundIndex > -1) {
+//     gs.locations[foundIndex].found = true;
+//     gs.currentIndex = foundIndex + 1;
+//     saveState();
+//   } else {
+//     console.warn(`Location with ID ${location_id} not found in gameState.`);
+//   }
+
+//   // Now, re-render the entire UI based on the new state.
+//   renderCluesFromState();
+// }
+
+// export function applyOfflineUI(locationId) {
+//   const el = document.querySelector(`[data-location-id="${locationId}"]`);
+//   if (el) el.classList.add('found-offline');
+
+//   const statusEl = document.querySelector('#status');
+//   if (statusEl) statusEl.textContent = 'Progress saved offline';
+
+//   advanceUI(locationId); // reuse same accordion logic
+// }
+
+// function advanceUI(locationId) {
+//   const gs = getGameState();
+//   if (!gs || !gs.locations) return;
+
+//   // close current
+//   const foundCollapse = document.getElementById(`collapse-${locationId}`);
+//   const foundButton = document.querySelector(`button[data-bs-target="#collapse-${locationId}"]`);
+//   if (foundCollapse) {
+//     foundCollapse.classList.remove('show');
+//     foundCollapse.setAttribute('aria-expanded', 'false');
+//   }
+//   if (foundButton) {
+//     foundButton.classList.add('collapsed');
+//     foundButton.setAttribute('aria-expanded', 'false');
+//   }
+
+//   // open next
+//   revealNextClue(gs.currentIndex);
+// }
+
+// function revealNextClue(clueIndex) {
+//   const nextItem = document.querySelector(`.accordion-item[data-clue-index="${clueIndex}"]`);
+//   if (!nextItem) {
+//     console.warn(`No accordion item found for index ${clueIndex}`);
+//     return;
+//   }
+
+//   nextItem.style.display = ''; // restores default display
+//   const nextCollapse = nextItem.querySelector('.accordion-collapse');
+//   const nextButton = nextItem.querySelector('.accordion-button');
+
+//   if (nextCollapse) {
+//     nextCollapse.classList.add('show');
+//     nextCollapse.setAttribute('aria-expanded', 'true');
+//   }
+//   if (nextButton) {
+//     nextButton.classList.remove('collapsed');
+//     nextButton.setAttribute('aria-expanded', 'true');
+//   }
+
+// }
+
+
+
+// // Show/hide clue cards based on currentIndex
+// function revealUnlockedClues() {
+//   const cards = document.querySelectorAll('.clue-card');
+//   const gameState = root.gameState;
+//   if (!gameState) return;
+//   cards.forEach((card, idx) => {
+//     card.style.display = idx <= gameState.currentIndex ? '' : 'none';
+//   });
+// }
+
+// Render clues from current gameState
+// export function renderCluesFromState_legacy() {
+//   const container = document.querySelector('#clues-container');
+//   const gs = getGameState();
+//   if (!container || !gs) return;
+
+//   container.innerHTML = '';
+//   gs.locations.forEach((loc, idx) => {
+//     const card = document.createElement('div');
+//     card.className = 'clue-card';
+//     card.dataset.clueIndex = idx;
+//     card.textContent = loc.clue_text;
+//     card.style.display = idx <= gs.currentIndex ? '' : 'none';
+//     container.appendChild(card);
+//   });
+// }

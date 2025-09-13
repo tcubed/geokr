@@ -21,13 +21,16 @@ export async function switchTeam(newTeamId) {
         // This is the core of the offline-first approach.
         gameState.teamId = parseInt(newTeamId, 10);
         // Resetting game-specific state
-        gameState.gameId = null; 
-        gameState.locations = []; 
+        //gameState.gameId = null; 
+        //gameState.locations = []; 
         gameState.currentIndex = 0; 
         saveState();
-        showToast("Switching teams...", { type: "info" });
         updateJoinGameSelects();
         if (activeTeamSelect) activeTeamSelect.value = gameState.teamId;
+
+         // --- Show toast immediately ---
+        const teamName = activeTeamSelect.selectedOptions[0]?.text || `Team ${teamId}`;
+        showToast(`Now on ${teamName}`, { type: "info" });
 
         // 2. Prepare payload for server synchronization
         const payload = { team_id: newTeamId };
@@ -145,24 +148,45 @@ if (joinForm) {
             bodyData.team_id = teamId;
         }
 
-        await window.offlineSync.sendOrQueue({
-            url: '/api/joingame',
-            method: 'POST',
-            body: bodyData, // 🌟 Use the conditionally built object
-            timestamp: Date.now()
-        }, {
-            onSuccess: (data) => {
-                if (data.success) {
-                    showToast(data.message || 'Joined game successfully!', { type: 'success' });
-                    window.location.href = '/findloc';
-                } else showToast(data.message || 'Failed to join game.', { type: 'danger' });
-            },
-            onQueued: () => {
-                showToast('Offline: join/create action saved locally and will sync later.', { type: 'info' });
-                window.location.href = '/findloc';
-            },
-            onFailure: (err) => console.error('Join game failed:', err)
-        });
+        try {
+            await window.offlineSync.sendOrQueue({
+                url: '/api/joingame',
+                method: 'POST',
+                credentials:'include', 
+                body: bodyData, // 🌟 Use the conditionally built object
+                timestamp: Date.now()
+            }, {
+                onSuccess: (data) => {
+                    if (data.success) {
+                        gameState.teamId = data.team_id;
+                        gameState.gameId = gameId;
+                        saveState();
+                        updateJoinGameSelects();
+
+                        if (data.already_on_team) {
+                        // User is already on a team, show info but stay on page
+                        showToast(data.message || 'You are already on this team.', { type: 'info' });
+                        } else {
+                        // Fresh join or new team
+                        showToast(data.message || 'Joined game successfully!', { type: 'success' });
+                        // Redirect to main game page
+                        window.location.href = '/findloc';
+                        }
+                    } else {
+                        showToast(data.message || 'Failed to join game.', { type: 'danger' });
+                    }
+                },
+                onQueued: () => {
+                    showToast('Offline: join/create action saved locally and will sync later.', { type: 'info' });
+                    //window.location.href = '/findloc';
+                    updateJoinGameSelects();
+                },
+                onFailure: (err) => console.error('Join game failed:', err)
+            });
+        } catch (err) {
+            console.error('Unexpected error in joinForm submit:', err);
+            showToast('Unexpected error joining game.', { type: 'danger' });
+        }
     });
 }
 

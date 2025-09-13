@@ -31,6 +31,67 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   .clue-card {
     display: none;
 }
+
+/* CAMERA */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 100; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+}
+
+.close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+/* FIREWORKS */
+#fireworks-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allows clicks to pass through */
+    z-index: 9999;
+}
+
+.firework {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0);
+    animation: explode 5s ease-out forwards;
+}
+
+@keyframes explode {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--x), var(--y)) scale(0);
+    }
+}
 </style>
 
 {% endblock %}
@@ -167,9 +228,28 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
 <div id="fireworks-container"></div>
 
+<div id="selfie-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <div class="camera-container">
+            <video id="camera-stream" autoplay playsinline></video>
+        </div>
+        <div class="selfie-actions">
+            <button id="capture-selfie-btn" class="btn btn-primary">
+                Capture Selfie
+            </button>
+        </div>
+        <img id="selfie-preview" class="d-none" alt="Selfie Preview">
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<script>
+  // mark the start before loading lots of scripts
+  performance.mark('scripts-start');
+</script>
  {{ super() }}
 <script type="module">
   const VERSION = "{{ version }}";
@@ -183,25 +263,27 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   window.defaultPosMode = defaultPosMode;
   window.DEBUG_GAME_STATE = true;
 
+  
   window.GAME_DATA = {
     gameId: {% if game is defined %}{{ game.id }}{% else %}null{% endif %},
     teamId: {% if team is defined %}{{ team.id }}{% else %}null{% endif %},
     locations: {{ locations|tojson|default('[]')|safe }},
-    currentIndex: {{ current_index|default(0) }}
+    currentIndex: {{ current_index|default(0) }},
+    enable_geolocation: {{ enable_geolocation | tojson }},
+    enable_selfie: {{ enable_selfie | tojson }},
+    enable_image_verify: {{ enable_image_verify | tojson }},
+    enable_qr_scanner: {{ enable_qr_scanner | tojson }},
+    bounds:[
+      {{ game.min_lat|tojson|default('0') }},
+      {{ game.min_lon|tojson|default('0') }},
+      {{ game.max_lat|tojson|default('0') }},
+      {{ game.max_lon|tojson|default('0') }}
+    ]
   };
-
+  //console.log('pages GAME_DATA:',window.GAME_DATA)
   window.locationImageUrls = GAME_DATA.locations.map(l => l.image_url).filter(Boolean);
 
-  window.bounds = [
-    {% if game is defined %}
-      {{ game.min_lat|default(0) }},
-      {{ game.min_lon|default(0) }},
-      {{ game.max_lat|default(0) }},
-      {{ game.max_lon|default(0) }}
-    {% else %}
-      0,0,0,0
-    {% endif %}
-  ];
+  
 
 //console.log('Initial:', window.GAME_DATA.locations);
 //setTimeout(()=>console.log('After 3s:', window.GAME_DATA.locations),3000);
@@ -253,6 +335,14 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   }
 </script>
 
-
+<script>
+  // mark end and measure after all scripts have executed
+  window.addEventListener('load', () => {
+    performance.mark('scripts-end');
+    performance.measure('all-scripts', 'scripts-start', 'scripts-end');
+    const measure = performance.getEntriesByName('all-scripts')[0];
+    console.log(`All scripts executed in ${measure.duration.toFixed(1)} ms`);
+  });
+</script>
 
 {% endblock %}

@@ -91,7 +91,8 @@ class TeamAdmin(AdminModelView):
         'start_time', 
         'end_time', 
         'discoverable', 
-        'memberships'
+        'memberships',
+        'data'
     )
 
     # form_widget_args = {
@@ -123,16 +124,18 @@ class TeamMembershipAdmin(AdminModelView):
     )
 
 class TeamLocationAssignmentAdmin(AdminModelView):
-    column_list = ('id', 'team', 'location', 'game', 'found', 'timestamp_found')
-    form_columns = ('team', 'location', 'game', 'found', 'timestamp_found')
-
+    column_list = ('id', 'team', 'location', 'location.id','game', 'found', 'timestamp_found','order_index')
     column_labels = {
         'team': 'Team',
         'location': 'Location',
+        'location.id': 'Location ID',
         'game': 'Game',
         'found': 'Found?',
-        'timestamp_found': 'Time Found'
+        'timestamp_found': 'Time Found',
+        'order_index':'Order'
     }
+
+    form_columns = ('team', 'location', 'game', 'found', 'timestamp_found','order_index')
 
     # Use searchable dropdowns for foreign key fields
     form_ajax_refs = {

@@ -288,12 +288,12 @@
     });
 
 
-    if ('serviceWorker' in navigator) {
-      //navigator.serviceWorker.register('/static/js/service-worker.js', { scope: '/' })
-      navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
-        .then(() => console.log('Service Worker Registered'))
-        .catch(err => console.error('Service Worker registration failed:', err));
-    }
+    // if ('serviceWorker' in navigator) {
+    //   //navigator.serviceWorker.register('/static/js/service-worker.js', { scope: '/' })
+    //   navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+    //     .then(() => console.log('Service Worker Registered'))
+    //     .catch(err => console.error('Service Worker registration failed:', err));
+    // }
 
 
   </script>
