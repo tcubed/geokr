@@ -72,6 +72,19 @@
 </div>
 
 <script>
+    // Embed the Python list as a JSON string and parse it in JavaScript
+    const gamesData = JSON.parse('{{ games_with_data | tojson | safe }}');
+    
+    // Log the data to the console for inspection
+    console.log("games_with_data contents:", gamesData);
+    
+    // Log a specific team's data to check for the selfies
+    if (gamesData.length > 0 && gamesData[0].teams.length > 0) {
+        console.log("Example team data:", gamesData[0].teams[0].data);
+    }
+</script>
+
+<script>
 document.addEventListener('DOMContentLoaded', function() {
     const select = document.getElementById('game_select');
     const container = document.getElementById('game_cards_container');

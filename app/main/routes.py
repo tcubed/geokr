@@ -820,7 +820,7 @@ def game_status():
                 except json.JSONDecodeError:
                     # Handle cases where the string isn't valid JSON
                     team.data = {} # Default to an empty dictionary
-    
+        
     # Pre-fetch all locations to map location IDs to names
     locations_map = {loc.id: loc for loc in Location.query.all()}
 
