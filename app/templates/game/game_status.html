@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Game Status{% endblock %}
+
+{% block content %}
+<div class="container mt-3">
+    <h1 class="mb-3">Game Status</h1>
+
+    <div class="mb-4">
+        <label for="game_select" class="form-label">Select Games to View:</label>
+        <select id="game_select" class="form-select" multiple>
+            {% for game in all_games %}
+            <option value="{{ game.id }}">{{ game.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div id="game_cards_container" class="row">
+        {% for game in games_with_data %}
+        <div class="col-md-6 mb-4" data-game-id="{{ game.id }}">
+            <div class="card h-100">
+                <div class="card-header h4 text-center">
+                    {{ game.name }}
+                </div>
+                <div class="card-body">
+                    {% if game.teams %}
+                        {% for team in game.teams %}
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5>Team: {{ team.name }}</h5>
+                                {% set selfie_count = team.data['selfie'] | length if team.data and 'selfie' in team.data else 0 %}
+                                <span class="badge bg-primary rounded-pill">{{ selfie_count }} / {{ game.locations|length }}</span>
+                            </div>
+                            <div class="card-body p-0">
+                                {% if team.data and 'selfie' in team.data %}
+                                <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel">
+                                    <div class="carousel-inner">
+                                        {% for loc_id, file_path in team.data.get('selfie', {}).items() %}
+                                        <div class="carousel-item {% if loop.first %}active{% endif %}">
+                                            <img src="{{ url_for('static', filename='uploads/' + file_path) }}" 
+                                                 class="d-block w-100" 
+                                                 alt="Selfie for location ID {{ loc_id }}">
+                                            <div class="carousel-caption d-none d-md-block">
+                                                <h6>{{ locations_map.get(loc_id|int).name }}</h6>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <button class="carousel-control-prev" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="prev">
+                                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                                        <span class="visually-hidden">Previous</span>
+                                    </button>
+                                    <button class="carousel-control-next" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="next">
+                                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                                        <span class="visually-hidden">Next</span>
+                                    </button>
+                                </div>
+                                {% else %}
+                                <div class="p-3 text-center text-muted">No selfies yet.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="p-3 text-center text-muted">No teams have joined this game yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const select = document.getElementById('game_select');
+    const container = document.getElementById('game_cards_container');
+
+    // Initial state: show all cards
+    const allGameCards = container.querySelectorAll('.col-md-6');
+    const allGameIds = Array.from(allGameCards).map(card => card.dataset.gameId);
+    
+    // Set all options as selected by default on page load
+    select.querySelectorAll('option').forEach(option => {
+        option.selected = true;
+    });
+
+    select.addEventListener('change', function() {
+        const selectedGameIds = Array.from(select.options)
+                                     .filter(option => option.selected)
+                                     .map(option => option.value);
+
+        allGameCards.forEach(card => {
+            const gameId = card.dataset.gameId;
+            if (selectedGameIds.length === 0 || selectedGameIds.includes(gameId)) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

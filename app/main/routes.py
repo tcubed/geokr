@@ -789,6 +789,43 @@ def game_admin():
     games = Game.query.order_by(Game.start_time.desc()).all()
     return render_template('game/game_admin.html', games=games)
 
+@main_bp.route('/game_status')
+@login_required
+def game_status():
+    """
+    Renders a page showing the status of all games, including team selfies.
+    """
+    all_games = Game.query.order_by(Game.name).all()
+    
+    # Get selected game IDs from the query string
+    selected_games_param = request.args.get('games')
+    selected_game_ids = []
+    if selected_games_param:
+        selected_game_ids = [int(gid) for gid in selected_games_param.split(',') if gid.isdigit()]
+    
+    # If no games are selected, get all games
+    if not selected_game_ids:
+        games_with_data = all_games
+    else:
+        games_with_data = Game.query.filter(Game.id.in_(selected_game_ids)).order_by(Game.name).all()
+    
+    # Eagerly load data for the template
+    for game in games_with_data:
+        game.teams = Team.query.filter_by(game_id=game.id).order_by(Team.name).all()
+    
+    # Pre-fetch all locations to map location IDs to names
+    locations_map = {loc.id: loc for loc in Location.query.all()}
+
+    return render_template(
+        'game/game_status.html', 
+        all_games=all_games,
+        games_with_data=games_with_data,
+        locations_map=locations_map
+    )
+
+
+
+
 @main_bp.route('/service-worker.js')
 def service_worker():
     return send_from_directory('..', 'service-worker.js')
