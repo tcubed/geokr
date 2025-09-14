@@ -812,6 +812,14 @@ def game_status():
     # Eagerly load data for the template
     for game in games_with_data:
         game.teams = Team.query.filter_by(game_id=game.id).order_by(Team.name).all()
+        for team in game.teams:
+            # Check if data exists and is a string, then parse it
+            if team.data and isinstance(team.data, str):
+                try:
+                    team.data = json.loads(team.data)
+                except json.JSONDecodeError:
+                    # Handle cases where the string isn't valid JSON
+                    team.data = {} # Default to an empty dictionary
     
     # Pre-fetch all locations to map location IDs to names
     locations_map = {loc.id: loc for loc in Location.query.all()}
