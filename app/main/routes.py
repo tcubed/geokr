@@ -805,29 +805,45 @@ def game_status():
     
     # If no games are selected, get all games
     if not selected_game_ids:
-        games_with_data = all_games
+        games_to_process = all_games
     else:
-        games_with_data = Game.query.filter(Game.id.in_(selected_game_ids)).order_by(Game.name).all()
+        games_to_process = Game.query.filter(Game.id.in_(selected_game_ids)).order_by(Game.name).all()
     
-    # Eagerly load data for the template
-    for game in games_with_data:
-        game.teams = Team.query.filter_by(game_id=game.id).order_by(Team.name).all()
-        for team in game.teams:
-            # Check if data exists and is a string, then parse it
+    serializable_games = []
+    for game in games_to_process:
+        # Create a dictionary for the game
+        game_data = {
+            'id': game.id,
+            'name': game.name,
+            'locations': [{'id': loc.id} for loc in game.locations]
+        }
+        
+        # Add teams data
+        teams_data = []
+        for team in Team.query.filter_by(game_id=game.id).order_by(Team.name).all():
+            # Check if data is a string and parse it
             if team.data and isinstance(team.data, str):
                 try:
                     team.data = json.loads(team.data)
                 except json.JSONDecodeError:
-                    # Handle cases where the string isn't valid JSON
-                    team.data = {} # Default to an empty dictionary
+                    team.data = {}
+            
+            teams_data.append({
+                'id': team.id,
+                'name': team.name,
+                'data': team.data
+            })
         
-    # Pre-fetch all locations to map location IDs to names
-    locations_map = {loc.id: loc for loc in Location.query.all()}
-
+        game_data['teams'] = teams_data
+        serializable_games.append(game_data)
+        
+    locations_map = {loc.id: {'id': loc.id, 'name': loc.name} for loc in Location.query.all()}
+    
+    # Pass the serializable data to the template
     return render_template(
-        'game/game_status.html', 
+        'game/game_status.html',
         all_games=all_games,
-        games_with_data=games_with_data,
+        games_with_data=serializable_games,
         locations_map=locations_map
     )
 
