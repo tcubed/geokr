@@ -184,7 +184,8 @@ export function renderCluesFromState() {
               ${window.GAME_DATA.enable_selfie ? `
                     <button id="btn-validate-selfie-${loc.id}" 
                             class="btn btn-primary btn-validate-selfie"
-                            data-location-id="${loc.id}">
+                            data-location-id="${loc.id}"
+                            data-location-image="${loc.image_url}">
                         Take Selfie
                     </button>
                 ` : ''}

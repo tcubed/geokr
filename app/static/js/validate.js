@@ -9,7 +9,7 @@ import {gameState,gameId,loadState,saveState} from './localStorage.js'; // Load 
 //import { GAME_DATA } from './globals.js';
 import {submitLocationValidation} from './offline-game.js'; // main API wrapper for submitting validation
 import { captureSelfieBlob } from '/static/js/validate-selfie.js';
-import { startCamera, getSelfieBlob} from './camera.js';
+import { startCamera, getSelfieBlobInset} from './camera.js';
 
 // Declare the variable in the global scope of the module
 let currentSelfieLocationId = null;
@@ -130,6 +130,9 @@ export function setupValidationButtons() {
         }
 
         const locationId = parentCard.dataset.locationId;
+        const locationImageUrl = button.dataset.locationImage; 
+        
+
         const gameId = window.GAME_DATA.gameId;
         if (!locationId) {
             console.error('Error: Parent card is missing data-location-id attribute.', parentCard);
@@ -232,7 +235,11 @@ export function setupValidationButtons() {
                 await startCamera();
 
                 // 2. Wait for the user to capture the selfie
-                const { blob: photoBlob, locationId: capturedLocationId } = await getSelfieBlob(locationId);
+                //const { blob: photoBlob, locationId: capturedLocationId } = await getSelfieBlob(locationId);
+                console.log('[validate], loc.id:'+locationId+', locationImageUrl:'+locationImageUrl)
+                console.log('[validate], locationImageUrl:',locationImageUrl)
+
+                const { blob: photoBlob, locationId: capturedLocationId } = await getSelfieBlobInset(locationId,locationImageUrl);
 
                 // 3. Hide the modal and submit the validation
                 modal.style.display = 'none';

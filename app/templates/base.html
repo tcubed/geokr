@@ -66,31 +66,34 @@
 
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
-      <a class="navbar-brand" href="/">Geo Clue Hunt
-        {# Back icon only on account page #}
-        {% if request.endpoint == 'main.account' %}
-          {#
-          <a class="btn btn-outline-light me-2 fw-bold" href="{{ url_for('main.findloc') }}" title="Back to game">
-            <i class="bi bi-arrow-left"></i>
-          </a>
-          #}
-          <div id="online-status" class="me-3" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-            <a class="btn btn-outline-light fw-bold text-center" href="{{ url_for('main.findloc') }}" title="Back to game">
-              <i class="bi bi-arrow-left"></i>
-            </a>
-            <span style="font-size: 0.8rem; color: white; margin-top: 2px;">Back To Game</span>
-          </div>
+      <a class="navbar-brand d-flex align-items-center" href="/">
+    <!-- Left stack -->
+    <div class="d-flex flex-column align-items-center me-3">
+      <img src="{{ url_for('static', filename='icons/grd_128a.png') }}"
+           alt="Icon"
 
+           width="64"
+           style="height:40px; object-fit:cover;"
+           class="">
+           <!--
+      <span class="fs-4 fw-bold">MyApp</span>
+      -->
+      <div class="text-white" style="font-size: 0.7em; line-height:1; margin-top:1px;">Geo Clue Game</div>
+    </div>
 
-        {% endif %}
+    <!-- Right: back arrow (only on account page) -->
+    {% if request.endpoint == 'main.account' %}
+      <div id="online-status" class="d-flex flex-column align-items-center text-center">
+        <a class="btn btn-outline-light fw-bold text-center"
+           href="{{ url_for('main.findloc') }}"
+           title="Back to game">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <span class="small text-white mt-1">Back To Game</span>
+      </div>
+    {% endif %}
+  </a>
 
-
-        {% if game and game.name %}
-        <div class="small" style="font-size: 0.6em; line-height:1; margin-top:1px;">
-          Game: {{ game.name }}
-        </div>
-        {% endif %}
-      </a>
       <div class="d-flex ms-auto align-items-center">
         <div id="online-status" class="me-3" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
           <i id="wifi-icon" class="bi bi-wifi" style="font-size: 24px; color: white;"></i>
@@ -106,8 +109,13 @@
             {% endif %}
           </a>
           {% if current_user.is_authenticated %}
+            {% if game and game.name %}
+            <div class="small text-white" style="font-size: 0.6m; line-height:1; margin-top:1px;">
+              Game: {{ game.name }}
+            </div>
+            {% endif %}
            {% if team and team.name %}
-              <div class="small text-white" style="font-size: 0.8em; line-height:1; margin-top:1px;">
+              <div class="small text-white" style="font-size: 0.6m; line-height:1; margin-top:1px;">
                 Team: {{team.name}}
               </div>
               {% endif %}

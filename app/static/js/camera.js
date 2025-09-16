@@ -52,6 +52,79 @@ export function getSelfieBlob(locationId) {
     });
 }
 
+export function getSelfieBlobInset(locationId, insetImageUrl) {
+    return new Promise((resolve, reject) => {
+        const cameraStreamElement = document.getElementById('camera-stream');
+        const captureButton = document.getElementById('capture-selfie-btn');
+
+        captureButton.addEventListener('click', async () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = cameraStreamElement.videoWidth;
+            canvas.height = cameraStreamElement.videoHeight;
+            const context = canvas.getContext('2d');
+
+            // Draw the camera frame
+            context.drawImage(cameraStreamElement, 0, 0, canvas.width, canvas.height);
+
+            // Draw inset image (lower right)
+            if (insetImageUrl) {
+                const inset = new Image();
+                inset.crossOrigin = 'anonymous'; // just in case
+                inset.src = insetImageUrl;
+                inset.onload = () => {
+                    const insetWidth = canvas.width * 0.25; // 25% of canvas width
+                    const insetHeight = inset.height * (insetWidth / inset.width);
+                    const insetX = canvas.width - insetWidth - 10; // 10px padding from right
+                    const insetY = canvas.height - insetHeight - 10; // 10px padding from bottom
+
+                    // Optional: draw a shadow
+                    context.shadowColor = 'rgba(0,0,0,0.5)';
+                    context.shadowBlur = 8;
+                    context.shadowOffsetX = 2;
+                    context.shadowOffsetY = 2;
+                                        
+                    // Draw a border
+                    context.strokeStyle = 'white';
+                    context.lineWidth = 3;
+
+                    context.drawImage(inset, insetX, insetY, insetWidth, insetHeight);
+                    
+                    // Draw the border
+                    context.strokeRect(insetX, insetY, insetWidth, insetHeight);
+                    
+                    // Reset shadow so it doesn’t affect other drawings
+                    context.shadowColor = 'transparent';
+
+                    // Convert to blob after drawing inset
+                    canvas.toBlob(blob => {
+                        if (blob) {
+                            resolve({ blob, locationId });
+                        } else {
+                            reject(new Error('Failed to create image blob.'));
+                        }
+                    }, 'image/jpeg', 0.8);
+                };
+                inset.onerror = () => reject(new Error('Failed to load inset image.'));
+            } else {
+                // No inset image: just export the selfie
+                canvas.toBlob(blob => {
+                    if (blob) {
+                        resolve({ blob, locationId });
+                    } else {
+                        reject(new Error('Failed to create image blob.'));
+                    }
+                }, 'image/jpeg', 0.8);
+            }
+
+            // Stop camera
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                cameraStreamElement.srcObject = null;
+            }
+        }, { once: true });
+    });
+}
+
 
 // // Event listener for the modal's capture button
 // document.getElementById('capture-selfie-btn').addEventListener('click', async () => {

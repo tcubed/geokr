@@ -3,9 +3,26 @@
 {% block title %}Game Status{% endblock %}
 
 {% block content %}
-<div class="container mt-3">
+<div class="container-fluid mt-3">
     <h1 class="mb-3">Game Status</h1>
 
+    <button class="btn btn-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#gameSelectCollapse" aria-expanded="true" aria-controls="gameSelectCollapse">
+        Select Games ▼
+    </button>
+
+    <div class="collapse show mt-2" id="gameSelectCollapse">
+        <div class="card card-body">
+        <label for="game_select" class="form-label">Select Games to View:</label>
+        <select id="game_select" class="form-select" multiple>
+            {% for game in all_games %}
+            <option value="{{ game.id }}">{{ game.name }}</option>
+            {% endfor %}
+        </select>
+        </div>
+    </div>
+
+{#
+    <!--
     <div class="mb-4">
         <label for="game_select" class="form-label">Select Games to View:</label>
         <select id="game_select" class="form-select" multiple>
@@ -14,8 +31,10 @@
             {% endfor %}
         </select>
     </div>
+    -->
+#}
+    <div id="game_cards_container" class="row mt-3">
 
-    <div id="game_cards_container" class="row">
         {% for game in games_with_data %}
         <div class="col-md-6 mb-4" data-game-id="{{ game.id }}">
             <div class="card h-100">
@@ -28,16 +47,16 @@
                         <div class="card mb-3">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5>Team: {{ team.name }}</h5>
-                                {% set selfie_count = team.data['selfie'] | length if team.data and 'selfie' in team.data else 0 %}
+                                {% set selfie_count = team.data['selfies'] | length if team.data and 'selfies' in team.data else 0 %}
                                 <span class="badge bg-primary rounded-pill">{{ selfie_count }} / {{ game.locations|length }}</span>
                             </div>
                             <div class="card-body p-0">
-                                {% if team.data and 'selfie' in team.data %}
+                                {% if team.data and 'selfies' in team.data %}
                                 <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel">
                                     <div class="carousel-inner">
-                                        {% for loc_id, file_path in team.data.get('selfie', {}).items() %}
+                                        {% for loc_id, imageName in team.data.get('selfies', {}).items() %}
                                         <div class="carousel-item {% if loop.first %}active{% endif %}">
-                                            <img src="{{ url_for('static', filename='uploads/' + file_path) }}" 
+                                            <img src="{{ url_for('static', filename='images/uploads/' + imageName) }}" 
                                                  class="d-block w-100" 
                                                  alt="Selfie for location ID {{ loc_id }}">
                                             <div class="carousel-caption d-none d-md-block">
@@ -86,6 +105,18 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Function to reload all carousel images (selfies)
+    function reloadSelfieImages() {
+        const carouselImages = document.querySelectorAll('.carousel-inner img');
+        carouselImages.forEach(img => {
+            if (img.src) {
+                const url = new URL(img.src, window.location.origin);
+                url.searchParams.set('_', Date.now()); // cache-busting
+                img.src = url.toString();
+            }
+        });
+    }
+
     const select = document.getElementById('game_select');
     const container = document.getElementById('game_cards_container');
 
@@ -98,20 +129,46 @@ document.addEventListener('DOMContentLoaded', function() {
         option.selected = true;
     });
 
+    // select.addEventListener('change', function() {
+    //     const selectedGameIds = Array.from(select.options)
+    //                                  .filter(option => option.selected)
+    //                                  .map(option => option.value);
+
+    //     allGameCards.forEach(card => {
+    //         const gameId = card.dataset.gameId;
+    //         if (selectedGameIds.length === 0 || selectedGameIds.includes(gameId)) {
+    //             card.style.display = 'block';
+    //         } else {
+    //             card.style.display = 'none';
+    //         }
+    //     });
+    // });
+
+    // document.getElementById('game_select').addEventListener('change', function() {
+    //     const collapseEl = document.getElementById('gameSelectCollapse');
+    //     const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl);
+    //     bsCollapse.hide(); // automatically collapse
+    // });
     select.addEventListener('change', function() {
+        // Hide/show cards
         const selectedGameIds = Array.from(select.options)
-                                     .filter(option => option.selected)
-                                     .map(option => option.value);
+                                    .filter(option => option.selected)
+                                    .map(option => option.value);
 
         allGameCards.forEach(card => {
             const gameId = card.dataset.gameId;
-            if (selectedGameIds.length === 0 || selectedGameIds.includes(gameId)) {
-                card.style.display = 'block';
-            } else {
-                card.style.display = 'none';
-            }
+            card.style.display = selectedGameIds.length === 0 || selectedGameIds.includes(gameId)
+                ? 'block' : 'none';
         });
+
+        // Collapse the select panel automatically
+        const collapseEl = document.getElementById('gameSelectCollapse');
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl);
+        bsCollapse.hide();
     });
+
+    // Reload every 30 seconds
+    setInterval(reloadSelfieImages, 30000);
 });
 </script>
 {% endblock %}

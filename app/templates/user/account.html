@@ -91,7 +91,7 @@
       <form id="options-form">
         <div class="form-check">
             <label for="location_mode">Location usage</label>
-            <select name="location_mode" id="location_mode">
+            <select name="location_mode" id="location_mode" disabled>
             <option value="none"  {{ 'selected' if location_mode == 'none' }}>No location</option>
             <option value="watch" {{ 'selected' if location_mode == 'watch' }}>Track position (live)</option>
             <option value="current" {{ 'selected' if location_mode == 'current' }}>Get position on demand</option>
@@ -101,13 +101,13 @@
         <h6 class="mt-3">Troubleshooting</h6>
         
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="default_pos_mode" name="default_pos_mode"
+          <input class="form-check-input" type="checkbox" id="default_pos_mode" name="default_pos_mode" disabled
             {% if request.cookies.get('default_pos_mode') == '1' %}checked{% endif %}>
           <label class="form-check-label" for="default_pos_mode">Default Position mode</label>
         </div>
 
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="debug_mode" name="debug_mode"
+          <input class="form-check-input" type="checkbox" id="debug_mode" name="debug_mode" disabled
             {% if debug_mode %}checked{% endif %}>
           <label class="form-check-label" for="debug_mode">Debug mode</label>
         </div>

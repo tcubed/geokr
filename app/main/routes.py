@@ -731,17 +731,28 @@ def mark_location_found():
         # 3. Update the Team's .data attribute
         team = Team.query.filter_by(id=team_id).first()
         if team:
-            try:
-                team_data = json.loads(team.data) if team.data else {}
-            except json.JSONDecodeError:
-                current_app.logger.warning(f"Invalid JSON in team {team_id} data field. Resetting.")
-                team_data = {}
-            if 'selfies' not in team_data:
-                team_data['selfies'] = {}
-            team_data['selfies'][location_id] = filepath
-            team.data = json.dumps(team_data)
-            current_app.logger.info(f"Updated team {team_id} data with selfie path.")
 
+            # try:
+            #     team_data = json.loads(team.data) if team.data else {}
+            # except json.JSONDecodeError:
+            #     current_app.logger.warning(f"Invalid JSON in team {team_id} data field. Resetting.")
+            #     team_data = {}
+            # if 'selfies' not in team_data:
+            #     team_data['selfies'] = {}
+            #team_data['selfies'][location_id] = unique_filename
+            #team.data = json.dumps(team_data)
+
+            if not team.data:
+                current_app.logger.warning(f"No team.data for {team_id}. Resetting.")
+                team.data = {}
+
+            # Ensure 'selfies' exists
+            team.data.setdefault('selfies', {})
+            team.data['selfies'][location_id] = unique_filename
+            
+            current_app.logger.info(f"Updated team {team_id} data, location {location_id} with selfie {unique_filename}.")
+        else:
+            current_app.logger.critical(f"[main.routes/api/locations/found] No team???")
 
     db.session.commit()
 
