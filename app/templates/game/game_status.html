@@ -2,6 +2,16 @@
 
 {% block title %}Game Status{% endblock %}
 
+{% block head %}
+<style>
+    .hidden-visually {
+  opacity: 0;
+  pointer-events: none;
+}
+</style>
+
+
+{% endblock %}
 {% block content %}
 <div class="container-fluid mt-3">
     <h1 class="mb-3">Game Status</h1>
@@ -9,32 +19,26 @@
     <button class="btn btn-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#gameSelectCollapse" aria-expanded="true" aria-controls="gameSelectCollapse">
         Select Games ▼
     </button>
-
     <div class="collapse show mt-2" id="gameSelectCollapse">
-        <div class="card card-body">
-        <label for="game_select" class="form-label">Select Games to View:</label>
-        <select id="game_select" class="form-select" multiple>
-            {% for game in all_games %}
-            <option value="{{ game.id }}">{{ game.name }}</option>
-            {% endfor %}
-        </select>
+        <div class="card card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+            <div class="mb-2 mb-md-0">
+                <label for="game_select" class="form-label mb-0 me-2">Select Games to View:</label>
+                <select id="game_select" class="form-select" multiple>
+                    {% for game in all_games %}
+                    <option value="{{ game.id }}">{{ game.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-check mt-2 mt-md-0">
+                <input class="form-check-input" type="checkbox" value="" id="groupByTeam">
+                <label class="form-check-label" for="groupByTeam">
+                    Group by Team
+                </label>
+            </div>
         </div>
     </div>
 
-{#
-    <!--
-    <div class="mb-4">
-        <label for="game_select" class="form-label">Select Games to View:</label>
-        <select id="game_select" class="form-select" multiple>
-            {% for game in all_games %}
-            <option value="{{ game.id }}">{{ game.name }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    -->
-#}
     <div id="game_cards_container" class="row mt-3">
-
         {% for game in games_with_data %}
         <div class="col-md-6 mb-4" data-game-id="{{ game.id }}">
             <div class="card h-100">
@@ -42,135 +46,272 @@
                     {{ game.name }}
                 </div>
                 <div class="card-body">
-                    {% if game.teams %}
-                        {% for team in game.teams %}
-                        <div class="card mb-3">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5>Team: {{ team.name }}</h5>
-                                {% set selfie_count = team.data['selfies'] | length if team.data and 'selfies' in team.data else 0 %}
-                                <span class="badge bg-primary rounded-pill">{{ selfie_count }} / {{ game.locations|length }}</span>
-                            </div>
-                            <div class="card-body p-0">
-                                {% if team.data and 'selfies' in team.data %}
-                                <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel">
-                                    <div class="carousel-inner">
-                                        {% for loc_id, imageName in team.data.get('selfies', {}).items() %}
-                                        <div class="carousel-item {% if loop.first %}active{% endif %}">
-                                            <img src="{{ url_for('static', filename='images/uploads/' + imageName) }}" 
-                                                 class="d-block w-100" 
-                                                 alt="Selfie for location ID {{ loc_id }}">
-                                            <div class="carousel-caption d-none d-md-block">
-                                                <h6>{{ locations_map.get(loc_id|int).name }}</h6>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    <button class="carousel-control-prev" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="prev">
-                                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                                        <span class="visually-hidden">Previous</span>
-                                    </button>
-                                    <button class="carousel-control-next" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="next">
-                                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                                        <span class="visually-hidden">Next</span>
-                                    </button>
+                    <div class="by-team-view">
+                        {% if game.teams %}
+                            {% for team in game.teams %}
+                            {% set selfie_count = team.selfies | length %}
+                            <div class="card mb-3" data-team-id="{{ team.id }}">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5>Team: {{ team.name }}</h5>
+                                    {% if selfie_count > 0 %}
+                                        <span class="badge bg-primary rounded-pill">{{ selfie_count }} / {{ team.locations_map | length }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary rounded-pill">No selfies</span>
+                                    {% endif %}
                                 </div>
-                                {% else %}
-                                <div class="p-3 text-center text-muted">No selfies yet.</div>
-                                {% endif %}
+                                <div class="card-body p-0">
+                                    {% if selfie_count > 0 %}
+                                    <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel">
+                                        <div class="carousel-inner">
+                                            {% for loc_id, loc_name in team.locations_map.items() %}
+                                                {% set selfie_filename = team.selfies.get(loc_id|string) %}
+                                                {% if selfie_filename %}
+                                                <div class="carousel-item {% if loop.first %}active{% endif %}">
+                                                    <img src="{{ url_for('static', filename='images/uploads/' + selfie_filename) }}"
+                                                         class="d-block w-100"
+                                                         alt="Selfie for {{ loc_name }}">
+                                                    <div class="carousel-caption d-none d-md-block">
+                                                        <h6>{{ loc_name }}</h6>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        <button class="carousel-control-prev" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="prev">
+                                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                                            <span class="visually-hidden">Previous</span>
+                                        </button>
+                                        <button class="carousel-control-next" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="next">
+                                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                                            <span class="visually-hidden">Next</span>
+                                        </button>
+                                    </div>
+                                    {% else %}
+                                    <div class="p-3 text-center text-muted">No selfies yet.</div>
+                                    {% endif %}
+                                </div>
                             </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="p-3 text-center text-muted">No teams have joined this game yet.</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- ALL-TEAMS VIEW -->
+                    <div class="all-teams-view d-none">
+                        <h5 class="mb-3">All Teams' Selfies</h5>
+                        
+                        {% if game.all_game_selfies | length > 0 %}
+                        <div id="allTeamsCarousel-{{ game.id }}" class="carousel slide" data-bs-ride="carousel">
+                            <div class="carousel-inner">
+                                {% for selfie in game.all_game_selfies %}
+                                <div class="carousel-item {% if loop.first %}active{% endif %}">
+                                    <img src="{{ url_for('static', filename='images/uploads/' + selfie.filename) }}"
+                                        class="d-block w-100"
+                                        alt="Selfie for location {{ selfie.loc_name }}">
+                                    <div class="carousel-caption d-none d-md-block">
+                                        <h6>{{ selfie.loc_name }} - {{ selfie.team_name }}</h6>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button class="carousel-control-prev" type="button" data-bs-target="#allTeamsCarousel-{{ game.id }}" data-bs-slide="prev">
+                                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                                <span class="visually-hidden">Previous</span>
+                            </button>
+                            <button class="carousel-control-next" type="button" data-bs-target="#allTeamsCarousel-{{ game.id }}" data-bs-slide="next">
+                                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                                <span class="visually-hidden">Next</span>
+                            </button>
                         </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="p-3 text-center text-muted">No teams have joined this game yet.</div>
-                    {% endif %}
+                        {% else %}
+                        <div class="p-3 text-center text-muted">No selfies have been found in this game yet.</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
+{% endblock %}
 
-<script>
-    // Embed the Python list as a JSON string and parse it in JavaScript
-    const gamesData = JSON.parse('{{ games_with_data | tojson | safe }}');
-    
-    // Log the data to the console for inspection
-    console.log("games_with_data contents:", gamesData);
-    
-    // Log a specific team's data to check for the selfies
-    if (gamesData.length > 0 && gamesData[0].teams.length > 0) {
-        console.log("Example team data:", gamesData[0].teams[0].data);
-    }
-</script>
 
+{% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Function to reload all carousel images (selfies)
-    function reloadSelfieImages() {
-        const carouselImages = document.querySelectorAll('.carousel-inner img');
-        carouselImages.forEach(img => {
-            if (img.src) {
-                const url = new URL(img.src, window.location.origin);
-                url.searchParams.set('_', Date.now()); // cache-busting
-                img.src = url.toString();
+
+    const gameSelect = document.getElementById('game_select');
+    const groupByTeamCheckbox = document.getElementById('groupByTeam');
+    const gameCardsContainer = document.getElementById('game_cards_container');
+    const allGameCards = gameCardsContainer.querySelectorAll('.col-md-6');
+
+    // Show all games initially by selecting all options
+    gameSelect.querySelectorAll('option').forEach(option => option.selected = true);
+
+    function toggleView() {
+        const isGrouped = groupByTeamCheckbox.checked;
+        allGameCards.forEach(card => {
+            const byTeamView = card.querySelector('.by-team-view');
+            const allTeamsView = card.querySelector('.all-teams-view');
+            
+            if (isGrouped) {
+                byTeamView.classList.remove('d-none');
+                allTeamsView.classList.add('d-none');
+            } else {
+                byTeamView.classList.add('d-none');
+                allTeamsView.classList.remove('d-none');
             }
         });
     }
 
-    const select = document.getElementById('game_select');
-    const container = document.getElementById('game_cards_container');
+    groupByTeamCheckbox.addEventListener('change', toggleView);
 
-    // Initial state: show all cards
-    const allGameCards = container.querySelectorAll('.col-md-6');
-    const allGameIds = Array.from(allGameCards).map(card => card.dataset.gameId);
-    
-    // Set all options as selected by default on page load
-    select.querySelectorAll('option').forEach(option => {
-        option.selected = true;
-    });
-
-    // select.addEventListener('change', function() {
-    //     const selectedGameIds = Array.from(select.options)
-    //                                  .filter(option => option.selected)
-    //                                  .map(option => option.value);
-
-    //     allGameCards.forEach(card => {
-    //         const gameId = card.dataset.gameId;
-    //         if (selectedGameIds.length === 0 || selectedGameIds.includes(gameId)) {
-    //             card.style.display = 'block';
-    //         } else {
-    //             card.style.display = 'none';
-    //         }
-    //     });
-    // });
-
-    // document.getElementById('game_select').addEventListener('change', function() {
-    //     const collapseEl = document.getElementById('gameSelectCollapse');
-    //     const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl);
-    //     bsCollapse.hide(); // automatically collapse
-    // });
-    select.addEventListener('change', function() {
-        // Hide/show cards
-        const selectedGameIds = Array.from(select.options)
-                                    .filter(option => option.selected)
-                                    .map(option => option.value);
+    gameSelect.addEventListener('change', function() {
+        const selectedGameIds = Array.from(gameSelect.options)
+                                             .filter(option => option.selected)
+                                             .map(option => option.value);
 
         allGameCards.forEach(card => {
             const gameId = card.dataset.gameId;
             card.style.display = selectedGameIds.length === 0 || selectedGameIds.includes(gameId)
                 ? 'block' : 'none';
         });
-
-        // Collapse the select panel automatically
-        const collapseEl = document.getElementById('gameSelectCollapse');
-        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl);
-        bsCollapse.hide();
     });
 
-    // Reload every 30 seconds
-    //setInterval(reloadSelfieImages, 30000);
-    setTimeout(() => location.reload(), 30000);
+    async function updateGameStatus() {
+        try {
+            const response = await fetch('/api/game_status');
+            const gamesData = await response.json();
 
+            gamesData.forEach(game => {
+                const gameCard = document.querySelector(`[data-game-id="${game.id}"]`);
+                if (!gameCard) return;
+
+                // --- UPDATE BY-TEAM VIEW ---
+                const byTeamView = gameCard.querySelector('.by-team-view');
+                game.teams.forEach(team => {
+                    const teamCard = byTeamView.querySelector(`[data-team-id="${team.id}"]`);
+                    if (!teamCard) return;
+
+                    const badge = teamCard.querySelector('.badge');
+                    const carouselContainer = teamCard.querySelector('.carousel');
+                    const carouselInner = teamCard.querySelector('.carousel-inner');
+                    const noSelfiesDiv = teamCard.querySelector('.p-3.text-center.text-muted');
+
+                    const selfies = team.selfies || {};
+                    const selfieCount = Object.keys(selfies).length;
+                    const totalLocations = Object.keys(team.locations_map).length;
+
+                    if (badge) {
+                        badge.textContent = selfieCount > 0 ? `${selfieCount} / ${totalLocations}` : 'No selfies';
+                        badge.className = `badge rounded-pill bg-${selfieCount > 0 ? 'primary' : 'secondary'}`;
+                    }
+
+                    if (selfieCount > 0) {
+                        if (carouselInner) {
+                            carouselInner.innerHTML = '';
+                            if (noSelfiesDiv) noSelfiesDiv.classList.add('d-none');
+
+                            let firstItem = true;
+                            Object.keys(team.locations_map).forEach(locId => {
+                                const filename = selfies[locId];
+                                if (filename) {
+                                    const div = document.createElement('div');
+                                    div.className = `carousel-item ${firstItem ? 'active' : ''}`;
+                                    firstItem = false;
+                                    const img = document.createElement('img');
+                                    img.src = `/static/images/uploads/${filename}?_=${Date.now()}`;
+                                    img.className = 'd-block w-100';
+                                    img.alt = `Selfie for location ID ${locId}`;
+                                    const caption = document.createElement('div');
+                                    caption.className = 'carousel-caption d-none d-md-block';
+                                    caption.innerHTML = `<h6>${team.locations_map[locId]}</h6>`;
+                                    div.appendChild(img);
+                                    div.appendChild(caption);
+                                    carouselInner.appendChild(div);
+                                }
+                            });
+                            if (carouselContainer) {
+                                carouselContainer.classList.remove('d-none');
+                                new bootstrap.Carousel(carouselContainer);
+                            }
+                        }
+                    } else {
+                        if (carouselContainer) carouselContainer.classList.add('d-none');
+                        if (noSelfiesDiv) noSelfiesDiv.classList.remove('d-none');
+                    }
+                });
+
+                // --- UPDATE ALL-TEAMS VIEW ---
+                const allTeamsView = gameCard.querySelector('.all-teams-view');
+                if (!allTeamsView) return;
+
+                const allTeamsCarousel = allTeamsView.querySelector('.carousel');
+                const allTeamsCarouselInner = allTeamsView.querySelector('.carousel-inner');
+                
+                // 1. Get the current active index before rebuilding.
+                let currentIndex = 0;
+                if (allTeamsCarousel) {
+                    const activeItem = allTeamsCarouselInner.querySelector('.carousel-item.active');
+                    if (activeItem) {
+                        currentIndex = Array.from(allTeamsCarouselInner.children).indexOf(activeItem);
+                    }
+                }
+
+                const allGameSelfies = [];
+                game.teams.forEach(team => {
+                    Object.entries(team.selfies).forEach(([locId, filename]) => {
+                        const intLocId = parseInt(locId, 10);
+                        const loc_name = game.locations_map[intLocId];
+                        if (loc_name) {
+                            allGameSelfies.push({
+                                filename,
+                                team_name: team.name,
+                                loc_name,
+                                loc_id: intLocId
+                            });
+                        }
+                    });
+                });
+
+                if (allGameSelfies.length > 0) {
+                    if (allTeamsCarouselInner) {
+                        allTeamsCarouselInner.innerHTML = '';
+                        //let firstItem = true;
+                        allGameSelfies.forEach((selfie,index) => {
+                            const div = document.createElement('div');
+                            //div.className = `carousel-item ${firstItem ? 'active' : ''}`;
+                            div.className = `carousel-item ${index === currentIndex ? 'active' : ''}`;
+                            //firstItem = false;
+                            const img = document.createElement('img');
+                            img.src = `/static/images/uploads/${selfie.filename}?_=${Date.now()}`;
+                            img.className = 'd-block w-100';
+                            img.alt = `Selfie for location ${selfie.loc_name}`;
+                            const caption = document.createElement('div');
+                            caption.className = 'carousel-caption d-none d-md-block';
+                            caption.innerHTML = `<h6>${selfie.loc_name} <br> ${selfie.team_name}</h6>`;
+                            div.appendChild(img);
+                            div.appendChild(caption);
+                            allTeamsCarouselInner.appendChild(div);
+                        });
+                        if (allTeamsCarousel) {
+                            allTeamsCarousel.classList.remove('d-none');
+                            new bootstrap.Carousel(allTeamsCarousel);
+                        }
+                    }
+                } else {
+                    if (allTeamsCarousel) allTeamsCarousel.classList.add('d-none');
+                }
+            });
+        } catch (err) {
+            console.error('Failed to update game status:', err);
+        }
+    }
+
+    toggleView();
+    updateGameStatus();
+    setInterval(updateGameStatus, 30000);
 });
 </script>
 {% endblock %}

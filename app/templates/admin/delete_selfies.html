@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Delete Selfies{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+    <h1 class="mb-4">Delete Selfies</h1>
+
+    <div id="status-message" class="alert d-none" role="alert"></div>
+
+    <form id="delete-selfies-form">
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+            {% if selfie_files %}
+                {% for filename in selfie_files %}
+                <div class="col">
+                    <div class="card shadow-sm h-100">
+                        <img src="{{ url_for('static', filename='images/uploads/' + filename) }}" class="card-img-top" alt="Selfie" loading="lazy">
+                        <div class="card-body">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="files_to_delete" value="{{ filename }}" id="checkbox-{{ loop.index }}">
+                                <label class="form-check-label" for="checkbox-{{ loop.index }}">
+                                    Select to Delete
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-12 text-center text-muted">No selfie images found.</div>
+            {% endif %}
+        </div>
+        
+        <div class="my-4 text-center">
+            <button type="submit" class="btn btn-danger btn-lg">Delete Selected Selfies</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusMessage = document.getElementById('status-message');
+
+    document.getElementById('delete-selfies-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const form = event.target;
+        const formData = new FormData(form);
+        const filesToDelete = formData.getAll('files_to_delete');
+
+        if (filesToDelete.length === 0) {
+            if (statusMessage) {
+                statusMessage.textContent = 'Please select at least one image to delete.';
+                statusMessage.classList.remove('alert-success', 'd-none');
+                statusMessage.classList.add('alert-danger');
+            }
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete ${filesToDelete.length} selected images?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/delete_selfies', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 'filenames': filesToDelete })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                if (statusMessage) {
+                    statusMessage.textContent = result.message;
+                    statusMessage.classList.remove('alert-danger', 'd-none');
+                    statusMessage.classList.add('alert-success');
+                }
+                
+                filesToDelete.forEach(filename => {
+                    const card = form.querySelector(`input[value="${filename}"]`).closest('.col');
+                    if (card) {
+                        card.remove();
+                    }
+                });
+
+            } else {
+                if (statusMessage) {
+                    statusMessage.textContent = `Error: ${result.message}`;
+                    statusMessage.classList.remove('alert-success', 'd-none');
+                    statusMessage.classList.add('alert-danger');
+                }
+            }
+        } catch (error) {
+            console.error('Deletion error:', error);
+            if (statusMessage) {
+                statusMessage.textContent = 'An unexpected error occurred during deletion.';
+                statusMessage.classList.remove('alert-success', 'd-none');
+                statusMessage.classList.add('alert-danger');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,4 +1,6 @@
+import os
 import datetime, time
+import json
 import random
 from itertools import cycle
 from sqlalchemy.orm.attributes import flag_modified
@@ -516,6 +518,100 @@ def get_game_state():
         "locations_found": locations_found
     })
 
+def get_game_status_data(game_filter=None):
+    """
+    Fetches and prepares game status data for a given filter.
+    Returns a list of dictionaries with all game and team details, including all_game_selfies.
+    """
+    if game_filter:
+        games_to_process = Game.query.filter(game_filter).order_by(Game.name).all()
+    else:
+        games_to_process = Game.query.order_by(Game.name).all()
+
+    games_with_data = []
+    for game in games_to_process:
+        game_locations_map = {loc.id: loc.name for loc in game.locations}
+        game_data = {
+            "id": game.id,
+            "name": game.name,
+            "locations": [{"id": loc.id, "name": loc.name} for loc in game.locations],
+            "locations_map": game_locations_map,
+            "selfies": [],  # optional, per-game selfies
+            "teams": [],
+            "all_game_selfies": []  # <-- add combined selfies here
+        }
+
+        for team in game.teams:
+            team_data_dict = {}
+            if team.data and isinstance(team.data, str):
+                try:
+                    team_data_dict = json.loads(team.data)
+                except json.JSONDecodeError:
+                    pass
+            elif team.data:
+                team_data_dict = team.data
+
+            selfies = team_data_dict.get('selfies', {})
+            locations_map = {loc.id: loc.name for loc in game.locations}
+
+            # Add team info
+            game_data["teams"].append({
+                "id": team.id,
+                "name": team.name,
+                "selfies": selfies,
+                "locations_map": locations_map,
+            })
+
+            # Collect all selfies for the game
+            for loc_id, filename in selfies.items():
+                loc_name = game_data["locations_map"].get(int(loc_id), None)  # ensure loc_id matches type
+                if loc_name:
+                    game_data["all_game_selfies"].append({
+                        "loc_id": loc_id,
+                        "filename": filename,
+                        "team_name": team.name,
+                        "loc_name": loc_name
+                    })
+
+        games_with_data.append(game_data)
+
+    return games_with_data
+
+
+# # main.py or wherever your routes live
+# @api_bp.route('/api/game_status')
+# @login_required
+# def api_game_status():
+#     all_games = Game.query.all()  # or filter based on user
+#     games_with_data = []
+
+#     for game in all_games:
+#         game_data = {
+#             "id": game.id,
+#             "name": game.name,
+#             "locations": [{ "id": loc.id, "name": loc.name } for loc in game.locations],
+#             "teams": []
+#         }
+#         for team in game.teams:
+#             selfies = team.data.get('selfies', {}) if team.data else {}
+#             game_data["teams"].append({
+#                 "id": team.id,
+#                 "name": team.name,
+#                 "selfies": selfies,
+#                 "locations_map": {loc.id: loc.name for loc in game.locations}
+#             })
+#         games_with_data.append(game_data)
+
+#     return jsonify(games_with_data)
+
+@api_bp.route('/api/game_status')
+@login_required
+def api_game_status():
+    """Returns game status data as JSON for the JavaScript frontend."""
+    games_with_data = get_game_status_data()
+    return jsonify(games_with_data)
+
+
 # ====================================================================
 # LOCATION ADMIN
 # ====================================================================
@@ -733,3 +829,49 @@ def save_all_routes(game_id):
     db.session.commit()
 
     return jsonify(success=True, message="All routes saved successfully!", routes=validated_routes)
+
+
+
+# ====================================================================
+# IMAGES ADMIN
+# ====================================================================
+
+@api_bp.route('/api/delete_selfies', methods=['POST'])
+@admin_required
+def api_delete_selfies():
+    """Deletes selected selfie images from the server."""
+    try:
+        data = request.get_json()
+        filenames = data.get('filenames', [])
+        
+        if not filenames:
+            return jsonify({"message": "No files specified for deletion."}), 400
+        
+        deleted_count = 0
+        errors = []
+        upload_folder = os.path.join(current_app.root_path, 'static/images/uploads')
+        
+        for filename in filenames:
+            # Basic security check to prevent directory traversal
+            if '..' in filename or filename.startswith('/'):
+                errors.append(f"Invalid filename provided: {filename}")
+                continue
+                
+            file_path = os.path.join(upload_folder, filename)
+            
+            # Check if the file exists and is actually in the uploads folder
+            if os.path.exists(file_path) and os.path.realpath(file_path).startswith(os.path.realpath(upload_folder)):
+                os.remove(file_path)
+                deleted_count += 1
+            else:
+                errors.append(f"File not found or invalid path: {filename}")
+                
+        message = f"Successfully deleted {deleted_count} image(s)."
+        if errors:
+            message += " Some files could not be deleted due to errors."
+            print(f"Deletion errors: {errors}") # Log errors for debugging
+            
+        return jsonify({"message": message}), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"An error occurred: {str(e)}"}), 500

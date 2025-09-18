@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Game Status{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <h1 class="mb-3">Game Status</h1>
+
+    <button class="btn btn-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#gameSelectCollapse" aria-expanded="true" aria-controls="gameSelectCollapse">
+        Select Games ▼
+    </button>
+
+    <div class="collapse show mt-2" id="gameSelectCollapse">
+        <div class="card card-body">
+            <label for="game_select" class="form-label">Select Games to View:</label>
+            <select id="game_select" class="form-select" multiple>
+                {% for game in all_games %}
+                <option value="{{ game.id }}">{{ game.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div id="game_cards_container" class="row mt-3">
+        {% for game in games_with_data %}
+        <div class="col-md-6 mb-4" data-game-id="{{ game.id }}">
+            <div class="card h-100">
+                <div class="card-header h4 text-center">
+                    {{ game.name }}
+                </div>
+                <div class="card-body">
+                    {% if game.teams %}
+                        {% for team in game.teams %}
+                        {% set selfie_count = team.selfies | length %}
+                        {% set total_locations = team.locations_map | length %}
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5>Team: {{ team.name }}</h5>
+                                <span class="badge bg-primary rounded-pill">{{ selfie_count }} / {{ total_locations }}</span>
+                            </div>
+                            <div class="card-body p-0">
+                                {% if selfie_count > 0 %}
+                                <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel">
+                                    <div class="carousel-inner">
+                                        {% for loc_id, loc_name in team.locations_map.items() %}
+                                            {% set selfie_filename = team.selfies.get(loc_id|string) %}
+                                            {% if selfie_filename %}
+                                            <div class="carousel-item {% if loop.first %}active{% endif %}">
+                                                <img src="{{ url_for('static', filename='images/uploads/' + selfie_filename) }}"
+                                                     class="d-block w-100"
+                                                     alt="Selfie for {{ loc_name }}">
+                                                <div class="carousel-caption d-none d-md-block">
+                                                    <h6>{{ loc_name }}</h6>
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                    <button class="carousel-control-prev" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="prev">
+                                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                                        <span class="visually-hidden">Previous</span>
+                                    </button>
+                                    <button class="carousel-control-next" type="button" data-bs-target="#carousel-{{ team.id }}" data-bs-slide="next">
+                                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                                        <span class="visually-hidden">Next</span>
+                                    </button>
+                                </div>
+                                {% else %}
+                                <div class="p-3 text-center text-muted">No selfies yet.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="p-3 text-center text-muted">No teams have joined this game yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    const select = document.getElementById('game_select');
+    const container = document.getElementById('game_cards_container');
+    const allGameCards = container.querySelectorAll('.col-md-6');
+
+    // Show all cards initially
+    select.querySelectorAll('option').forEach(option => option.selected = true);
+
+    // Handle game select change
+    select.addEventListener('change', function() {
+        const selectedGameIds = Array.from(select.options)
+                                             .filter(option => option.selected)
+                                             .map(option => option.value);
+
+        allGameCards.forEach(card => {
+            const gameId = card.dataset.gameId;
+            card.style.display = selectedGameIds.length === 0 || selectedGameIds.includes(gameId)
+                ? 'block' : 'none';
+        });
+
+        // Collapse the select panel
+        const collapseEl = document.getElementById('gameSelectCollapse');
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl);
+        bsCollapse.hide();
+    });
+
+    // Function to update selfies dynamically
+    async function updateSelfies() {
+        try {
+            const response = await fetch('/api/game_status');
+            const gamesData = await response.json();
+
+            gamesData.forEach(game => {
+                const gameCard = document.querySelector(`[data-game-id="${game.id}"]`);
+                if (!gameCard) return;
+
+                game.teams.forEach(team => {
+                    const teamCard = gameCard.querySelector(`[data-team-id="${team.id}"]`);
+                    if (!teamCard) return;
+
+                    const badge = teamCard.querySelector('.badge');
+                    const carouselContainer = teamCard.querySelector('.carousel');
+                    const carouselInner = teamCard.querySelector('.carousel-inner');
+                    const noSelfiesDiv = teamCard.querySelector('.p-3.text-center.text-muted');
+
+                    const selfies = team.selfies || {};
+                    const selfieCount = Object.keys(selfies).length;
+                    const totalLocations = Object.keys(team.locations_map).length;
+
+                    // Update badge count
+                    if (badge) {
+                        badge.textContent = `${selfieCount} / ${totalLocations}`;
+                    }
+
+                    if (selfieCount > 0) {
+                        if (carouselInner) {
+                            carouselInner.innerHTML = '';
+                            if (noSelfiesDiv) noSelfiesDiv.style.display = 'none';
+                            let firstItem = true;
+
+                            Object.keys(team.locations_map).forEach(locId => {
+                                const filename = selfies[locId];
+                                if (filename) {
+                                    const div = document.createElement('div');
+                                    div.className = `carousel-item ${firstItem ? 'active' : ''}`;
+                                    firstItem = false;
+
+                                    const img = document.createElement('img');
+                                    img.src = `/static/images/uploads/${filename}?_=${Date.now()}`;
+                                    img.className = 'd-block w-100';
+                                    img.alt = `Selfie for location ID ${locId}`;
+
+                                    const caption = document.createElement('div');
+                                    caption.className = 'carousel-caption d-none d-md-block';
+                                    caption.innerHTML = `<h6>${team.locations_map[locId]}</h6>`;
+                                    
+                                    div.appendChild(img);
+                                    div.appendChild(caption);
+                                    carouselInner.appendChild(div);
+                                }
+                            });
+                            if (carouselContainer) carouselContainer.style.display = 'block';
+                        }
+                    } else {
+                        if (carouselContainer) {
+                            carouselContainer.style.display = 'none';
+                        }
+                        if (noSelfiesDiv) {
+                            noSelfiesDiv.style.display = 'block';
+                        }
+                    }
+                });
+            });
+        } catch (err) {
+            console.error('Failed to update selfies:', err);
+        }
+    }
+
+    // Initial load
+    updateSelfies();
+
+    // Update every 30 seconds
+    setInterval(updateSelfies, 3000);
+
+});
+</script>
+
+
+{% endblock %}

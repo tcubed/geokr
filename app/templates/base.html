@@ -148,6 +148,7 @@
                 <a class="dropdown-item" href="{{ url_for('main.game_admin') }}">Game Mgmt</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_locations') }}">Game Locations</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_routes') }}">Game Routes</a>
+                <a class="dropdown-item" href="{{ url_for('admin_cust.delete_selfies') }}">Delete Selfies</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.copy_locations') }}">Copy Locations</a>
                 
                 {% if game and game.id %}

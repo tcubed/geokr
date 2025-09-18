@@ -409,6 +409,26 @@ def image_directories():
     dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
     return jsonify(dirs)
 
+
+
+# -------------------------------
+# GET available images (including subdirectories)
+# -------------------------------
+
+@admin_bp.route('/delete_selfies')
+@login_required
+def delete_selfies():
+    """Renders the page to select and delete selfie images."""
+    upload_folder = os.path.join(current_app.root_path, 'static/images/uploads')
+    
+    # Get a list of all files in the uploads folder
+    try:
+        selfie_files = [f for f in os.listdir(upload_folder) if os.path.isfile(os.path.join(upload_folder, f))]
+    except FileNotFoundError:
+        selfie_files = [] # Return an empty list if the folder doesn't exist
+
+    return render_template('admin/delete_selfies.html', selfie_files=selfie_files)
+
 # WITHOUT PIL
 # @admin_bp.route('/api/upload-image', methods=['POST'])
 # def upload_image():

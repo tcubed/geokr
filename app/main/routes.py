@@ -29,6 +29,7 @@ from app.main import main_bp
 from app.main import utils
 from app.main.cache import deleted_tombstones, cleanup_tombstones
 
+from app.api.routes import get_game_status_data
 
 import random
 
@@ -803,60 +804,75 @@ def game_admin():
 @main_bp.route('/game_status')
 @login_required
 def game_status():
-    """
-    Renders a page showing the status of all games, including team selfies.
-    """
+    """Renders the game status HTML page."""
     all_games = Game.query.order_by(Game.name).all()
     
-    # Get selected game IDs from the query string
     selected_games_param = request.args.get('games')
-    selected_game_ids = []
+    game_filter = None
     if selected_games_param:
         selected_game_ids = [int(gid) for gid in selected_games_param.split(',') if gid.isdigit()]
+        game_filter = Game.id.in_(selected_game_ids)
     
-    # If no games are selected, get all games
-    if not selected_game_ids:
-        games_to_process = all_games
-    else:
-        games_to_process = Game.query.filter(Game.id.in_(selected_game_ids)).order_by(Game.name).all()
-    
-    serializable_games = []
-    for game in games_to_process:
-        # Create a dictionary for the game
-        game_data = {
-            'id': game.id,
-            'name': game.name,
-            'locations': [{'id': loc.id} for loc in game.locations]
-        }
+    games_with_data = get_game_status_data(game_filter)
         
-        # Add teams data
-        teams_data = []
-        for team in Team.query.filter_by(game_id=game.id).order_by(Team.name).all():
-            # Check if data is a string and parse it
-            if team.data and isinstance(team.data, str):
-                try:
-                    team.data = json.loads(team.data)
-                except json.JSONDecodeError:
-                    team.data = {}
-            
-            teams_data.append({
-                'id': team.id,
-                'name': team.name,
-                'data': team.data
-            })
-        
-        game_data['teams'] = teams_data
-        serializable_games.append(game_data)
-        
-    locations_map = {loc.id: {'id': loc.id, 'name': loc.name} for loc in Location.query.all()}
-    
-    # Pass the serializable data to the template
     return render_template(
         'game/game_status.html',
         all_games=all_games,
-        games_with_data=serializable_games,
-        locations_map=locations_map
+        games_with_data=games_with_data
     )
+
+# @main_bp.route('/game_status')
+# @login_required
+# def game_status():
+#     all_games = Game.query.order_by(Game.name).all()
+    
+#     # Get selected game IDs from the query string
+#     selected_games_param = request.args.get('games')
+#     selected_game_ids = []
+#     if selected_games_param:
+#         selected_game_ids = [int(gid) for gid in selected_games_param.split(',') if gid.isdigit()]
+    
+#     if not selected_game_ids:
+#         games_to_process = all_games
+#     else:
+#         games_to_process = Game.query.filter(Game.id.in_(selected_game_ids)).order_by(Game.name).all()
+    
+#     games_with_data = []
+#     for game in games_to_process:
+#         game_data = {
+#             "id": game.id,
+#             "name": game.name,
+#             "locations": [{"id": loc.id, "name": loc.name} for loc in game.locations],
+#             "teams": []
+#         }
+        
+#         for team in game.teams:
+#             team_data_dict = {}
+#             if team.data and isinstance(team.data, str):
+#                 try:
+#                     team_data_dict = json.loads(team.data)
+#                 except json.JSONDecodeError:
+#                     pass
+#             elif team.data:
+#                 team_data_dict = team.data
+            
+#             selfies = team_data_dict.get('selfies', {})
+#             locations_map = {loc.id: loc.name for loc in game.locations}
+
+#             game_data["teams"].append({
+#                 "id": team.id,
+#                 "name": team.name,
+#                 "selfies": selfies,
+#                 "locations_map": locations_map,
+#             })
+            
+#         games_with_data.append(game_data)
+        
+#     return render_template(
+#         'game/game_status.html',
+#         all_games=all_games,
+#         games_with_data=games_with_data
+#     )
 
 
 
