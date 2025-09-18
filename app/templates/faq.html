@@ -6,6 +6,8 @@
 <div class="container mt-4">
   <h1>Frequently Asked Questions</h1>
   <div class="accordion" id="faqAccordion">
+
+    <!--
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingLocation">
         <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLocation" aria-expanded="true" aria-controls="collapseLocation">
@@ -43,7 +45,116 @@
         </div>
       </div>
     </div>
-    <!-- Add more FAQ items here as needed -->
+    -->
+
+
+
+
+
+    <div class="accordion-item">
+  <h2 class="accordion-header" id="headingLocationAndSelfies">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLocationAndSelfies" aria-expanded="false" aria-controls="collapseLocationAndSelfies">
+      I can't find this location / Selfies at clues
+    </button>
+  </h2>
+  <div id="collapseLocationAndSelfies" class="accordion-collapse collapse" aria-labelledby="headingLocationAndSelfies" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>Can't find the location?</strong>
+      <ul>
+        <li>You can <b>mark the location directly</b> and move on to the next clue if you get stumped.</li>
+        <li>This ensures you keep your game progress and can return later if needed.</li>
+        <li>Use any hints or nearby landmarks on the map to help identify tricky locations.</li>
+      </ul>
+
+      <strong>Selfies at clues:</strong>
+      <ul>
+        <li>A selfie including you and the clue location provides visual confirmation that you found the clue.</li>
+        <li>Not everyone is required to take a selfie.</li>
+        <li>To advance in the game, you must either:
+          <ul>
+            <li><b>Take a selfie</b> (preferred), or</li>
+            <li><b>Mark directly</b> if you cannot take a selfie.</li>
+          </ul>
+        </li>
+        <li>Choosing “mark directly” still allows progress but does not provide visual confirmation.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="accordion-item">
+  <h2 class="accordion-header" id="headingGeolocation">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGeolocation" aria-expanded="false" aria-controls="collapseGeolocation">
+      Does the game use my location?
+    </button>
+  </h2>
+  <div id="collapseGeolocation" class="accordion-collapse collapse" aria-labelledby="headingGeolocation" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>Current status of geolocation:</strong>
+      <ul>
+        <li>The game does <b>not</b> use geolocation or GPS today.</li>
+        <li>In the future, geolocation features will be added to enhance gameplay and clue tracking.</li>
+        <li>When geolocation is added, you may need to enable location services in your browser or phone settings.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="accordion-item">
+  <h2 class="accordion-header" id="headingCellularData">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCellularData" aria-expanded="false" aria-controls="collapseCellularData">
+      Will the game use cellular data?
+    </button>
+  </h2>
+  <div id="collapseCellularData" class="accordion-collapse collapse" aria-labelledby="headingCellularData" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>Data usage information:</strong>
+      <ul>
+        <li>Yes, the game currently uses cellular data.</li>
+        <li>Your selfies will be uploaded, and there will be minor traffic to the server for game progress.  Selfies will be deleted within 3 days of game conclusion.  Contact us if you want your selfies!</li>
+        <li>If you are very data-conscious, you can <b>“mark directly”</b> instead of taking selfies. This minimizes data usage and allows you to advance in the game, though it won’t be as fun.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="accordion-item">
+  <h2 class="accordion-header" id="headingCoBranding">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCoBranding" aria-expanded="false" aria-controls="collapseCoBranding">
+      Can I co-brand a version of this game?
+    </button>
+  </h2>
+  <div id="collapseCoBranding" class="accordion-collapse collapse" aria-labelledby="headingCoBranding" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>Co-branding opportunities:</strong>
+      <ul>
+        <li>Yes! We are developing several game-related activities that can be co-branded for various institutions.</li>
+        <li>This allows schools, organizations, or businesses to use the game with their own branding while leveraging our platform.</li>
+        <li>Stay tuned for details on how to apply or request a co-branded version.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="accordion-item">
+  <h2 class="accordion-header" id="headingQuestions">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseQuestions" aria-expanded="false" aria-controls="collapseQuestions">
+      Questions?
+    </button>
+  </h2>
+  <div id="collapseQuestions" class="accordion-collapse collapse" aria-labelledby="headingQuestions" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>If you have questions during the game:</strong>
+      <ul>
+        <li>Text <b>Ted Tower</b> at <b>(920) 944-7028</b>.</li>
+        <li>He can provide hints, clarify rules, or help with any issues.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
   </div>
 </div>
 {% endblock %}
