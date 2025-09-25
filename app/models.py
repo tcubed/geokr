@@ -152,6 +152,10 @@ class TeamMembership(db.Model):
     @property
     def game_id(self):
         return self.team.game_id
+    
+    def __str__(self):
+        # This is what will show up in admin
+        return f"{self.user.display_name} ({self.role})"
 
 class TeamLocationAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
