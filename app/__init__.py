@@ -29,7 +29,7 @@ def create_app():
     app = Flask(__name__)
     
     print(f"Template folder: {app.template_folder}")
-    app.config['VERSION'] = str(int(time.time()))  # or use a static number for production
+    app.config['VERSION'] = 1 #str(int(time.time()))  # or use a static number for production
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -79,11 +79,11 @@ def create_app():
     
     @app.after_request
     def add_header(response):
-        if app.debug:
-            # Disable caching
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
+        # if app.debug:
+        #     # Disable caching
+        #     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        #     response.headers["Pragma"] = "no-cache"
+        #     response.headers["Expires"] = "0"
         return response
 
     with app.app_context():
