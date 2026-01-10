@@ -12,7 +12,7 @@ async function fetchImages() {
     const resp = await fetch('/admin/api/images');
     if (!resp.ok) throw new Error('Failed to load images');
     availableImages = await resp.json();
-    //console.log('availableImages:',availableImages)
+    console.log('availableImages:',availableImages)
   } catch (err) {
     console.error('Error fetching images:', err);
     availableImages = [];
@@ -22,7 +22,7 @@ async function fetchImages() {
 
 // Initialize images on page load
 fetchImages();
-console.log('availableImages:', availableImages);
+//console.log('availableImages:', availableImages);
 
 const filterInput = document.getElementById('filterInput');
 // Filter cards based on input
@@ -59,6 +59,7 @@ function renderLocations(locs, filterText = '') {
   
   // Use all available images for dropdowns (or optionally filter only for matching images)
   const filteredImages = availableImages;
+  console.log('filteredImages:',filteredImages);
 
   // Add "New Location" card at the top
   if (gameSelect.value) {
