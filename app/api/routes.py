@@ -21,6 +21,15 @@ from app.api import api_bp
 
 from app.main import utils
 
+def to_float_or_none(v):
+    if v is None or v == "" or v == "null":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def admin_required(f):
     """
     Decorator that protects a route by checking for user authentication and admin status.
@@ -660,8 +669,11 @@ def location_detail(loc_id):
         loc.name = data.get("name", loc.name)
         loc.clue_text = data.get("clue_text", loc.clue_text)
         loc.image_url = data.get("image", loc.image_url)
-        loc.latitude = data.get("latitude", loc.latitude)
-        loc.longitude = data.get("longitude", loc.longitude)
+        if "latitude" in data:
+            loc.latitude = to_float_or_none(data.get("latitude"))
+
+        if "longitude" in data:
+            loc.longitude = to_float_or_none(data.get("longitude"))
 
         db.session.commit()
         return jsonify({"success": True, "message": "Location updated", "location": {
@@ -695,8 +707,8 @@ def add_location():
         name=data.get("name", "New Location"),
         clue_text=data.get("clue_text", ""),
         image_url=data.get("image", ""),
-        latitude=data.get("latitude", 0.0),
-        longitude=data.get("longitude", 0.0),
+        latitude=to_float_or_none(data.get("latitude")),
+        longitude=to_float_or_none(data.get("longitude")),
     )
     db.session.add(new_loc)
     db.session.commit()

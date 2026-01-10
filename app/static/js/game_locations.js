@@ -116,10 +116,10 @@ function renderLocations(locs, filterText = '') {
           
           <div class="row mb-2">
               <div class="col-6">
-                  <input type="number" step="any" class="form-control loc-lat" value="${loc.latitude || ''}" placeholder="Latitude">
+                  <input type="number" step="any" class="form-control loc-lat" value="${loc.latitude ?? ''}" placeholder="Latitude">
               </div>
               <div class="col-6">
-                  <input type="number" step="any" class="form-control loc-lon" value="${loc.longitude || ''}" placeholder="Longitude">
+                  <input type="number" step="any" class="form-control loc-lon" value="${loc.longitude ?? ''}" placeholder="Longitude">
               </div>
           </div>
           
@@ -158,8 +158,10 @@ container.addEventListener('click', async (e) => {
         const text = card.querySelector('.clue-text').value;
         let image = card.querySelector('.clue-image').value;
         // Get latitude and longitude values
-        const latitude = card.querySelector('.loc-lat').value;
-        const longitude = card.querySelector('.loc-lon').value;
+        const latRaw = card.querySelector('.loc-lat').value;
+        const lonRaw = card.querySelector('.loc-lon').value;
+        const latitude = latRaw === '' ? null : Number(latRaw);
+        const longitude = lonRaw === '' ? null : Number(lonRaw);
 
         // Strip the prefix before sending to the server
         if (image.startsWith('/static/images/')) {
@@ -200,8 +202,13 @@ container.addEventListener('click', async (e) => {
       const name = card.querySelector('.new-loc-name').value.trim() || 'New Location';
       const text = card.querySelector('.new-loc-text').value.trim();
       let image = card.querySelector('.new-loc-image').value;
-      const latitude = card.querySelector('.new-loc-lat').value;
-      const longitude = card.querySelector('.new-loc-lon').value;
+      //const latitude = card.querySelector('.new-loc-lat').value;
+      //const longitude = card.querySelector('.new-loc-lon').value;
+      const latRaw = card.querySelector('.loc-lat').value;
+      const lonRaw = card.querySelector('.loc-lon').value;
+      const latitude = latRaw === '' ? null : Number(latRaw);
+      const longitude = lonRaw === '' ? null : Number(lonRaw);
+
       const gameId = gameSelect.value;
 
       if (image.startsWith('/static/images/')) image = image.replace('/static/images/', '');
