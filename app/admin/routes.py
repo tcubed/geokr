@@ -478,7 +478,7 @@ def upload_image():
     try:
         img = Image.open(file)
         max_dim = 640
-        img.thumbnail((max_dim, max_dim), Image.ANTIALIAS)  # preserves aspect ratio
+        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)  # preserves aspect ratio
         file_path = os.path.join(target_dir, filename)
         img.save(file_path)  # format inferred from filename extension
     except Exception as e:
