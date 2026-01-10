@@ -22,6 +22,7 @@ async function fetchImages() {
 
 // Initialize images on page load
 fetchImages();
+console.log('availableImages:', availableImages);
 
 const filterInput = document.getElementById('filterInput');
 // Filter cards based on input
@@ -261,6 +262,10 @@ container.addEventListener('click', async (e) => {
         option.textContent = imagePath;
         option.selected = true;
         select.appendChild(option);
+
+        // ✅ Add this line:
+        availableImages.push(`/static/images/${imagePath}`);
+        renderLocations(allLocations); // optional if you want all cards updated
       };
 
       new bootstrap.Modal(uploadModalEl).show();
