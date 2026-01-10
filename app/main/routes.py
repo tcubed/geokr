@@ -212,8 +212,8 @@ def findloc():
         loc_data = {
             "id": loc.id,
             "name": loc.name,
-            "lat": float(loc.latitude), # Ensure these are floats for JavaScript
-            "lon": float(loc.longitude),
+            "lat": float(loc.latitude) if loc.latitude is not None else None, # Ensure these are floats for JavaScript
+            "lon": float(loc.longitude) if loc.longitude is not None else None,
             "clue_text": loc.clue_text,
             "image_url": img_url,
             "found": assignment.found

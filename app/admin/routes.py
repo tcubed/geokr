@@ -448,7 +448,7 @@ def delete_selfies():
 #     # Return relative path like 'gam1/newimage.png'
 #     return jsonify({"success": True, "path": f"{directory}/{filename}"})
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 @admin_bp.route('/api/upload-image', methods=['POST'])
 def upload_image():
@@ -477,6 +477,9 @@ def upload_image():
     # Use Pillow to open and resize the image
     try:
         img = Image.open(file)
+        # Auto-rotate according to EXIF Orientation tag
+        img = ImageOps.exif_transpose(img)
+
         max_dim = 640
         img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)  # preserves aspect ratio
         file_path = os.path.join(target_dir, filename)
