@@ -1,0 +1,54 @@
+I am writing a geo-based game.  It has a flask backend and I'm writting so it can be offline when not on wifi.  My template will send all the locations to the player and prefetch assets while online.  Initially the player will only see the first clue (some combination of text or an image).  To start with, they will manually mark with a button that they are in the location, at which point the next clue will be revealed.  
+
+Project Warm-Up Summary
+I’m building a location-based team game app with Flask backend and a modern JavaScript frontend. Major elements include:
+Game Model: Games have multiple teams, each assigned specific locations (clues) to find.
+TeamLocationAssignment: Tracks which locations are assigned to which teams and whether they’ve been found.
+
+Frontend:
+Displays clues progressively to players.
+Supports multiple verification methods (button, geolocation, QR code, image matching, selfie).
+Uses IndexedDB and offline sync logic for offline play with deferred syncing of found locations.
+Uses localStorage for light-weight state caching.
+Heavy use of ES6 module imports and separation of DOM/event listener code into modules for cleaner structure.
+
+Backend:
+Flask app using flask-login, flask-admin, flask-migrate with SQLite database.
+API routes support fetching clues, marking locations found by any team member, and syncing team progress.
+Team-level “found” status is updated when any member finds a location, syncing across team members.
+
+Goals:
+Offline-first experience with robust sync when back online.
+Modular frontend JS with async/await and clear separation of concerns.
+Progressive clue reveal driven by geolocation or manual input.
+
+
+
+Hey! 👋 Welcome to your new project. This app is designed to be an **offline-first** game, meaning it will work seamlessly even without an internet connection. The files are organized to support this core feature by separating the server-side logic from the client-side, enabling the client to handle all game state and UI updates locally.
+
+***
+
+### File Organization and Purpose
+
+* **Server-Side (Flask):** The Python files handle initial page loads and API endpoints. The server's main job is to **hydrate** the client with the starting game data and sync any queued updates when the user is back online.
+
+* **Client-Side (JavaScript):** The JavaScript files are the heart of the offline-first experience.
+    * `offline-db.js`: Establishes and manages the **IndexedDB**, a client-side database that persistently stores game state and queued actions. .
+    * `localStorage.js`: Manages the local storage of game state, including a player's progress. 
+    * `findloc.js`: Contains the core game logic, such as updating the UI and handling player actions (e.g., finding a clue).
+    * `app-init.js`: Acts as the **orchestration layer**. It's the first script to run on page load, handling the crucial sequence of checking for offline data, syncing with the server, and then rendering the UI.
+    * `offline-sync.js`: Works with a **Service Worker** to queue and manage offline actions, ensuring they are sent to the server once a connection is re-established.
+
+***
+
+### Data Model and Core Functionality
+
+The data model is centered on a few key elements:
+
+* **Games**: The high-level scavenger hunt that a player can join.
+* **Teams**: A group of players competing together.
+* **Locations**: The physical spots that players need to find.
+* **Team Membership**: A link between a user and a team, with an `is_active` flag to designate the user's current team.
+* **TeamLocationAssignment**: The crucial link that tracks which locations a specific team needs to find and whether they have been found. This table stores the player's progress in the database and is essential for offline syncing.
+
+This architecture ensures a fast, reliable, and continuous gameplay experience, whether the user is connected or not.

@@ -63,6 +63,22 @@ class Game(db.Model):
             self.min_lon = None
             self.max_lon = None
 
+    def get_brand_icon(self):
+        """
+        Returns (icon_url, alt_text)
+        """
+        default_icon = 'icons/grd_128a.png'
+        default_alt = 'Geo Clue Game'
+
+        if not self.data:
+            return default_icon, default_alt
+
+        branding = self.data.get('branding', {})
+        icon = branding.get('icon_url', default_icon)
+        alt = branding.get('icon_alt', default_alt)
+
+        return icon, alt
+
 class GameType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)

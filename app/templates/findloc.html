@@ -33,6 +33,7 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 }
 
 /* CAMERA */
+
 .modal {
     display: none; /* Hidden by default */
     position: fixed; /* Stay in place */
@@ -60,6 +61,83 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     font-size: 28px;
     font-weight: bold;
 }
+
+
+/* Ensure the modal is a full-screen overlay on mobile */
+#selfie-modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 1050; /* Above everything else */
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto; /* Enable scrolling if needed */
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Make the modal content flexible and centered */
+#selfie-modal .modal-content {
+    background-color: #000;
+    margin: 5vh auto; /* 5% vertical margin */
+    padding: 10px;
+    border: none;
+    width: 95%; /* Use a percentage for flexible width */
+    max-width: 600px; /* Prevent it from getting too large on big screens */
+    position: relative;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    display: flex; /* Use flexbox for vertical alignment */
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Style the close button */
+#selfie-modal .close-btn {
+    color: #f1f1f1;
+    font-size: 2.5em;
+    font-weight: bold;
+    position: absolute;
+    top: 5px;
+    right: 15px;
+    z-index: 1060;
+    cursor: pointer;
+}
+
+/* Ensure the camera container and video are responsive */
+.camera-container {
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+    /* Optional: Use aspect ratio for consistent sizing */
+    /* padding-top: 75%; /* 4:3 aspect ratio (height is 75% of width) */
+}
+
+#camera-stream {
+    width: 100%; /* Make video fill its container */
+    height: auto; /* Maintain aspect ratio */
+    display: block;
+}
+
+/* Make the actions section and button responsive */
+.selfie-actions {
+    width: 100%;
+    text-align: center;
+    margin-top: 15px;
+}
+
+#capture-selfie-btn {
+    width: 90%; /* Use a percentage for the button */
+    max-width: 250px;
+    padding: 12px 24px;
+    font-size: 1.2em;
+    border-radius: 50px;
+}
+
+
+
+
+
 
 /* FIREWORKS */
 #fireworks-container {

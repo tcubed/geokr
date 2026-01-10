@@ -20,7 +20,7 @@
 
   <link rel="manifest" href="/static/manifest.json">
 
-  <link rel="apple-touch-icon" sizes="180x180" href="/static/images/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32x32.png') }}">
   <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
   <link rel="manifest" href="{{ url_for('static', filename='icons/site.webmanifest') }}">
@@ -56,6 +56,10 @@
       top: 0.2rem;
       cursor: pointer;
     }
+    .navbar-custom {
+      background-color: var(--bs-primary) !important;
+    }
+
   </style>
 </head>
 <body>
@@ -64,21 +68,21 @@
     <button id="closeOfflineBanner" aria-label="Close">&times;</button>
   </div>
 
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <nav class="navbar navbar-expand-lg navbar-dark navbar-custom"
+    style="{% if navbar_color %}--bs-primary: {{ navbar_color }};{% endif %}">
+
     <div class="container-fluid">
       <a class="navbar-brand d-flex align-items-center" href="/">
     <!-- Left stack -->
     <div class="d-flex flex-column align-items-center me-3">
-      <img src="{{ url_for('static', filename='icons/grd_128a.png') }}"
-           alt="Icon"
-
-           width="64"
-           style="height:40px; object-fit:cover;"
+      <img src="{{ url_for('static', filename=brand_icon) }}"
+           alt="{{ brand_icon_alt }}"
+           style="height:40px; width:auto;"
            class="">
            <!--
       <span class="fs-4 fw-bold">MyApp</span>
       -->
-      <div class="text-white" style="font-size: 0.7em; line-height:1; margin-top:1px;">Geo Clue Game</div>
+      <div class="text-white" style="font-size: 0.7em; line-height:1; margin-top:1px;">{{brand_icon_alt}}</div>
     </div>
 
     <!-- Right: back arrow (only on account page) -->

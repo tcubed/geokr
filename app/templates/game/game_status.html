@@ -61,7 +61,7 @@
                                 </div>
                                 <div class="card-body p-0">
                                     {% if selfie_count > 0 %}
-                                    <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel">
+                                    <div id="carousel-{{ team.id }}" class="carousel slide" data-bs-ride="carousel" data-bs-interval="6000">
                                         <div class="carousel-inner">
                                             {% for loc_id, loc_name in team.locations_map.items() %}
                                                 {% set selfie_filename = team.selfies.get(loc_id|string) %}

@@ -74,31 +74,36 @@ def get_active_team(user):
 @main_bp.route('/')
 def index():
     #team_id = session.get('active_team_id')
-
-    if current_user.is_authenticated:
-        #return redirect(url_for('main.main_page'))
-        team_id = session.get('active_team_id')
-        if team_id:
-            team = Team.query.get(team_id)
-            if team and team.game and team.game.gametype:
-                gametype = team.game.gametype.name.lower()
-
-                #if gametype == 'navigation':
-                #    return redirect(url_for('main.main_page', #game_id=team.game.id
-                #                           ))
-                #el
-                if gametype == 'findloc':
-                    return redirect(url_for('main.findloc', #game_id=team.game.id
-                                            ))
-                else:
-                    flash("Unsupported game type for this team.", "warning")
-            else:
-                flash("Could not find valid team or game info.", "warning")
-        else:
-            flash("No active team selected.", "warning")
+    if not current_user.is_authenticated:
+        return redirect(url_for("auth.register_or_login"))
     
-    #return redirect(url_for("auth.login"))  # or render landing page template
-    return redirect(url_for("auth.register_or_login"))  # or render landing page template
+    return redirect(url_for('main.findloc'))
+    # if current_user.is_authenticated:
+    #     #return redirect(url_for('main.main_page'))
+    #     team_id = session.get('active_team_id')
+    #     if team_id:
+    #         team = Team.query.get(team_id)
+    #         print('team:',team)
+    #         if team and team.game and team.game.gametype:
+    #             print('team.game: ',team.game)
+    #             gametype = team.game.gametype.name.lower()
+    #             print('gametype: ',gametype)
+    #             #if gametype == 'navigation':
+    #             #    return redirect(url_for('main.main_page', #game_id=team.game.id
+    #             #                           ))
+    #             #el
+    #             if gametype == 'findloc':
+    #                 return redirect(url_for('main.findloc', #game_id=team.game.id
+    #                                         ))
+    #             else:
+    #                 flash("Unsupported game type for this team.", "warning")
+    #         else:
+    #             flash("Could not find valid team or game info.", "warning")
+    #     else:
+    #         flash("No active team selected.", "warning")
+    
+    # #return redirect(url_for("auth.login"))  # or render landing page template
+    # return redirect(url_for("auth.register_or_login"))  # or render landing page template
 
     # Show games whose start date is no older than yesterday
     #yesterday = datetime.utcnow() - timedelta(days=1)
@@ -259,6 +264,9 @@ def findloc():
     #     ]
     #     for game in games
     # }
+    #icon_url, icon_alt = game.get_brand_icon()
+    #brand_icon=icon_url,
+    #brand_icon_alt=icon_alt,
 
     return render_template("findloc.html",
                            game=game,
@@ -524,6 +532,10 @@ def api_joingame():
         })
     
     elif new_team_name:  # Create new team
+         # 🌟 Only admins can create new teams
+        if not current_user.is_admin:
+            return jsonify({"success": False, "message": "Only admins can create new teams."}), 403
+        
         # Check for team name uniqueness before creating
         if Team.query.filter_by(game_id=game_id, name=new_team_name).first():
             return jsonify({"success": False, "message": "Team name already exists."}), 409

@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 import logging
 import sys
 
+from app.config import DevConfig
+
 # logging.basicConfig(
 #     level=logging.INFO,  # or DEBUG for more detail
 #     format='%(asctime)s %(levelname)s %(message)s',
@@ -25,38 +27,12 @@ mail = Mail()  # create Mail instance
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'  # or your login route
 
-def create_app():
+def create_app(config_class=DevConfig):
     app = Flask(__name__)
+    app.config.from_object(config_class)
     
-    print(f"Template folder: {app.template_folder}")
-    app.config['VERSION'] = 1 #str(int(time.time()))  # or use a static number for production
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # or 'Strict'
-    app.config['REMEMBER_COOKIE_HTTPONLY'] = True
-    app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=365)
-    app.config['SESSION_COOKIE_SECURE'] = False    # True only in HTTPS
-    app.config['REMEMBER_COOKIE_SECURE'] = False           # True in prod HTTPS
-
-    # EMAIL
-    app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-    app.config['MAIL_PORT'] = 587
-    app.config['MAIL_USE_TLS'] = True
-    app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
-    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-    #app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_PASSWORD'))
-    app.config['MAIL_DEFAULT_SENDER'] = ('My App', os.getenv('MAIL_USERNAME'))
-
     # IMAGES
     app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'static', 'images', 'uploads')
-
-    # Disable static file caching for development
-    # Flask's default is 12 hours (43200 seconds)
-    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-
 
     app.secret_key = 'your-secret-ballroom'  # Needed for Flask-Admin
 
@@ -72,10 +48,39 @@ def create_app():
         }
     
     @app.context_processor
-    def inject_version():
-        return dict(version=app.config['VERSION'])
-    # def inject_user():
-    #     return dict(current_user=current_user)
+    def inject_globals():
+        # ---- version (existing behavior) ----
+        context = {
+            "version": app.config.get("VERSION", "")
+        }
+
+        # ---- optional game branding ----
+        brand_icon = "icons/apple-touch-icon.png"
+        brand_icon_alt = "Geo Clue Game"
+        navbar_color = "#0d6efd"
+
+        from app.main.routes import get_active_team
+        try:
+            if current_user.is_authenticated:
+                team = get_active_team(current_user)
+                if team and team.game:
+                    game = team.game
+                    if game.data:
+                        branding = game.data.get("branding", {})
+                        brand_icon = branding.get("icon_url", brand_icon)
+                        brand_icon_alt = branding.get("icon_alt", brand_icon_alt)
+                        navbar_color=branding.get("navbar_color", navbar_color)
+        except Exception:
+            # Context processors must NEVER break rendering
+            pass
+
+        context.update({
+            "brand_icon": brand_icon,
+            "brand_icon_alt": brand_icon_alt,
+            "navbar_color": navbar_color
+        })
+
+        return context
     
     @app.after_request
     def add_header(response):
