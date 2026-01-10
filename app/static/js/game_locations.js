@@ -204,8 +204,8 @@ container.addEventListener('click', async (e) => {
       let image = card.querySelector('.new-loc-image').value;
       //const latitude = card.querySelector('.new-loc-lat').value;
       //const longitude = card.querySelector('.new-loc-lon').value;
-      const latRaw = card.querySelector('.loc-lat').value;
-      const lonRaw = card.querySelector('.loc-lon').value;
+      const latRaw = card.querySelector('.new-loc-lat').value;
+      const lonRaw = card.querySelector('.new-loc-lon').value;
       const latitude = latRaw === '' ? null : Number(latRaw);
       const longitude = lonRaw === '' ? null : Number(lonRaw);
 
