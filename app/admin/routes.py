@@ -15,23 +15,6 @@ from app.models import (db,
 from app.admin import admin_bp
 
 
-def check_auth(username, password):
-    return username == 'admin' and password == 'secret'
-
-def authenticate():
-    return Response(
-        'Login required', 401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
-        return f(*args, **kwargs)
-    return decorated
-
 def admin_required(f):
     """
     Decorator that protects a route by checking for user authentication and admin status.
@@ -47,7 +30,7 @@ def admin_required(f):
     return decorated_function
 
 @admin_bp.route('/load_sample_data')
-@requires_auth
+@admin_required
 def load_sample_data():
     from app.models import db, Location, Character
 
@@ -70,7 +53,7 @@ def load_sample_data():
     return "Sample data loaded."
 
 @admin_bp.route('/clear')
-@requires_auth
+@admin_required
 def clear_data():
     from app.models import db, Location, Character, Team, Game, team_game
     db.session.query(team_game).delete()
@@ -84,25 +67,25 @@ def clear_data():
 
 
 @admin_bp.route('/games')
-@requires_auth
+@admin_required
 def admin_games_page():
     print("Rendering admin_games.html")
     return render_template('admin_games.html')
 
 @admin_bp.route('/teams')
-@requires_auth
+@admin_required
 def admin_teams_page():
     return render_template('admin_teams.html')
 
 @admin_bp.route('/characters')
-@requires_auth
+@admin_required
 def admin_characters_page():
     print("Rendering admin_characters.html")
     return render_template('admin_characters.html')
 
 
 @admin_bp.route('/api/games', methods=['GET', 'POST'])
-#@requires_auth
+@admin_required
 def admin_api_games():
     from app.models import Game, db
     if request.method == 'POST':
@@ -116,7 +99,7 @@ def admin_api_games():
         return jsonify([{"id": g.id, "name": g.name, "description": g.description} for g in games])
 
 @admin_bp.route('/api/teams', methods=['GET', 'POST'])
-@requires_auth
+@admin_required
 def admin_api_teams():
     from app.models import Team, Game, db
     if request.method == 'POST':
@@ -143,7 +126,7 @@ def admin_api_teams():
 
 
 @admin_bp.route('/api/characters', methods=['GET', 'POST'])
-@requires_auth
+@admin_required
 def admin_api_characters():
     from app.models import Character, Location, Game, db
     if request.method == 'POST':
@@ -196,7 +179,7 @@ def admin_api_characters():
 #     return jsonify([{"id": loc.id, "name": loc.name} for loc in locations])
 
 @admin_bp.route('/api/characters/<int:id>', methods=['PUT', 'DELETE'])
-@requires_auth
+@admin_required
 def admin_api_character_detail(id):
     from app.models import Character, Location, db
     character = Character.query.get_or_404(id)

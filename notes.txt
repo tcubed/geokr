@@ -1,0 +1,6 @@
+const updates = await offlineDB.getAllUpdates();
+console.log("Actual queued updates:", updates);
+
+on pythonanywhere can reduce space by clearing part of cache:
+# Clear pip cache
+rm -rf ~/.cache/pip

@@ -402,6 +402,12 @@ def account():
 
     print(f"[account, GET] account: {time.time()-start_time:.4f}s")
 
+    current_app.logger.warning(
+        "[account] session active_team_id=%s user_team_ids=%s",
+        session.get('active_team_id'),
+        user_team_ids
+    )
+
     return render_template(
         'user/account.html',
         user=user,
@@ -502,15 +508,29 @@ def api_joingame():
 
     # Check if user is already a member of any team in this game
     existing_membership = (
-        db.session.query(TeamMembership)
-        .join(Team)
-        .filter(TeamMembership.user_id == current_user.id)
-        .filter(Team.game_id == game_id)
+        # db.session.query(TeamMembership)
+        # .join(Team)
+        # .filter(TeamMembership.user_id == current_user.id)
+        # .filter(Team.game_id == game_id)
+        # .first()
+        TeamMembership.query
+        .filter_by(
+            user_id=current_user.id,
+            team_id=team_id
+        )
         .first()
     )
 
     if existing_membership:
         # 🌟 Already on a team: treat as success, send team info
+        # ✅ ACTIVATE the team the user is already on
+        session['active_team_id'] = existing_membership.team_id
+
+        current_app.logger.warning(
+            f"[api_joingame] Activated existing team "
+            f"{existing_membership.team_id} for user {current_user.id}"
+        )
+
         return jsonify({
             "success": True,
             "team_id": existing_membership.team_id,
@@ -562,6 +582,29 @@ def api_joingame():
     
     print(f"[api_joingame] send back, need to do something: {time.time()-start_time:.4f}s")
     return jsonify({"success": False, "message": "Must select or create a team."}), 400
+
+@main_bp.route('/api/leaveteam', methods=['POST'])
+@login_required
+def leave_team():
+    team_id = request.json.get('team_id')
+
+    membership = TeamMembership.query.filter_by(
+        user_id=current_user.id,
+        team_id=team_id
+    ).first()
+
+    if not membership:
+        return jsonify(success=False, message="Not a member of that team"), 400
+
+    db.session.delete(membership)
+    db.session.commit()
+
+    # Clear active team if needed
+    if session.get('active_team_id') == team_id:
+        session.pop('active_team_id', None)
+
+    return jsonify(success=True, message="You have left the team.")
+    #return jsonify({"ok": True})
 
 
 @main_bp.route('/api/switch_team', methods=['POST'])

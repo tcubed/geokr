@@ -190,32 +190,6 @@ def register_or_login():
     # For GET requests, show the combined form
     return render_template('user/login.html')
 
-# @auth_bp.route('/login_leg2', methods=['GET', 'POST'])
-# def login_leg2():
-#     if request.method == 'POST':
-#         email = request.form.get('email')
-#         if not email:
-#             flash("Please enter your email.", "warning")
-#             return redirect(url_for('auth.login'))
-
-#         user = User.query.filter_by(email=email.lower().strip()).first()
-#         current_app.logger.debug(f"Login attempt: email={email}, user_found={bool(user)}")
-#         if not user:
-#             flash("Email not found.", "danger")
-#             current_app.logger.info(f"Login failed: {email} not found")
-#             return redirect(url_for('auth.login'))
-
-#         if send_magic_link_email(user):
-#             flash('Magic login link sent to your email.', 'success')
-#             current_app.logger.info(f"Magic link sent to: {email}")
-#         else:
-#             flash('Failed to send email. Please try again later.', 'danger')
-#             current_app.logger.warning(f"Failed to send magic link to: {email}")
-
-#         return redirect(url_for('auth.login'))
-
-#     return render_template('user/login.html')
-
 
 @auth_bp.route("/magic-login")
 def magic_login():
@@ -237,16 +211,7 @@ def magic_login():
 
     login_user(user, remember=True)
     flash(f"Welcome back, {user.display_name}!", "success")
-    #return redirect(url_for("main.account"))
     return redirect(url_for("main.findloc"))
-
-    # Generate persistent resume token
-    resume_token = generate_resume_token(user.email)
-
-    # Serve a minimal page that stores token in localStorage and redirects
-    return render_template("user/magic_success.html",
-                           resume_token=resume_token,
-                           display_name=user.display_name)
 
 
 @auth_bp.route('/logout')
@@ -255,49 +220,3 @@ def logout():
     logout_user()
     flash('Logged out.', 'success')
     return redirect(url_for('auth.register_or_login'))
-
-
-# =============================================
-#                 LEGACY
-# from werkzeug.security import generate_password_hash, check_password_hash
-
-
-# @main_bp.route('/register_legacy', methods=['GET', 'POST'])
-# def register_legacy():
-#     if request.method == 'POST':
-#         email = request.form['email']
-#         display_name = request.form['display_name']
-#         password = request.form['password']
-#         if User.query.filter_by(email=email).first():
-#             flash('Email already registered.', 'danger')
-#             return redirect(url_for('main.register'))
-#         user = User(email=email, display_name=display_name,
-#                     password_hash=generate_password_hash(password))
-#         db.session.add(user)
-#         #db.session.commit()
-
-#         # Assign "user" role
-#         user_role = Role.query.filter_by(name="user").first()
-#         if not user_role:
-#             user_role = Role(name="user", description="Standard user")
-#             db.session.add(user_role)
-#             #db.session.commit()
-#         db.session.add(UserRole(user_id=user.id, role_id=user_role.id))
-#         db.session.commit()
-
-#         flash('Registration successful. Please log in.', 'success')
-#         return redirect(url_for('main.login'))
-#     return render_template('user/register.html')
-
-# @main_bp.route('/login_legacy', methods=['GET', 'POST'])
-# def login_legacy():
-#     if request.method == 'POST':
-#         email = request.form['email']
-#         password = request.form['password']
-#         user = User.query.filter_by(email=email).first()
-#         if user and check_password_hash(user.password_hash, password):
-#             login_user(user,remember=True)
-#             flash('Logged in successfully.', 'success')
-#             return redirect(url_for('main.account'))
-#         flash('Invalid credentials.', 'danger')
-#     return render_template('user/login.html')

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Account - GeoKR{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width:400px;">
+    <h1>Switch Game</h3>
+    <div class="mb-3">
+        <ul id="team-list">
+            {% for membership in current_user.team_memberships %}
+            <li class="mb-2" data-team-id="{{ membership.team.id }}">
+                <button class="btn btn-sm me-2"
+                        onclick="this.disabled=true; switchTeam({{ membership.team.id }})">
+                {% if session.active_team_id == membership.team.id %}
+                    <strong>Active</strong>
+                {% else %}
+                    Switch
+                {% endif %}
+                </button>
+                {{ membership.team.name }} ({{ membership.team.game.name }})
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

@@ -52,6 +52,50 @@
             {% endfor %}
           </select>
         </div>
+
+        {% set ns = namespace(active_membership=None) %}
+
+        
+        {% for m in current_user.team_memberships %}
+          {% if m.team.id == session.active_team_id|int %}
+            {% set ns.active_membership = m %}
+          {% endif %}
+        {% endfor %}
+        
+        <div class="mb-3 p-3 border rounded bg-light">
+          <strong>DEBUG INFO:</strong>
+          <pre>
+            session.active_team_id: {{ session.active_team_id }} (type={{ session.active_team_id.__class__.__name__ }})
+            {% for m in current_user.team_memberships %}
+              Membership: team_id={{ m.team.id }} game_id={{ m.team.game_id }} team_name={{ m.team.name }}
+            {% endfor %}
+            ns.active_membership set? {{ ns.active_membership is not none }}
+          </pre>
+        </div>
+
+        <div class="mb-3 p-3 border rounded bg-light">
+          <strong>Current Team:</strong>
+          {% if ns.active_membership %}
+            <div class="mt-1">
+              {{ ns.active_membership.team.name }}
+              <small class="text-muted">
+                ({{ ns.active_membership.team.game.name }})
+              </small>
+            </div>
+            <button
+              type="button"
+              id="leaveTeamBtn"
+              class="btn btn-outline-danger btn-sm mt-2"
+              data-team-id="{{ ns.active_membership.team.id }}">
+              Leave Team
+            </button>
+          {% else %}
+            <div class="text-muted mt-1">None</div>
+          {% endif %}
+        </div>
+
+
+
         <div class="mb-3">
           <label for="team_id" class="form-label">Join Existing Team</label>
           <select name="team_id" id="team_id" class="form-select">

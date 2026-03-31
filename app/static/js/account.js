@@ -29,7 +29,9 @@ export async function switchTeam(newTeamId) {
         if (activeTeamSelect) activeTeamSelect.value = gameState.teamId;
 
          // --- Show toast immediately ---
-        const teamName = activeTeamSelect.selectedOptions[0]?.text || `Team ${teamId}`;
+        //const teamName = activeTeamSelect.selectedOptions[0]?.text || `Team ${teamId}`;
+        const teamName = activeTeamSelect?.selectedOptions[0]?.text || `Team ${newTeamId}`;
+
         showToast(`Now on ${teamName}`, { type: "info" });
 
         // 2. Prepare payload for server synchronization
@@ -131,7 +133,7 @@ if (joinForm) {
     joinForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const gameId = gameSelect.value;
-        const teamSelect = document.getElementById('team_id');
+        //const teamSelect = document.getElementById('team_id');
         const teamId = teamSelect.value || null;
         const newTeamInput = document.getElementById('new_team_name');
         const newTeamName = newTeamInput.value.trim() || null;
@@ -188,6 +190,42 @@ if (joinForm) {
             showToast('Unexpected error joining game.', { type: 'danger' });
         }
     });
+}
+
+const leaveBtn = document.getElementById('leaveTeamBtn');
+if (leaveBtn) {
+  leaveBtn.addEventListener('click', async () => {
+    if (!confirm("Are you sure you want to leave this team?")) return;
+
+    const teamId = leaveBtn.dataset.teamId;
+
+    await window.offlineSync.sendOrQueue({
+      url: '/api/leaveteam',
+      method: 'POST',
+      body: { team_id: teamId },
+      timestamp: Date.now()
+    }, {
+      onSuccess: (data) => {
+        // alert(data.message);
+        // // clear local state
+        // gameState.teamId = null;
+        // saveState();
+        // window.location.reload();
+
+        // showToast(data.message, { type: "success" });
+
+        gameState.teamId = null;
+        gameState.gameId = null;
+        saveState();
+
+        updateJoinGameSelects();
+        if (activeTeamSelect) activeTeamSelect.value = '';
+
+      },
+      onQueued: () => alert("Offline: leave request queued."),
+      onFailure: err => console.error(err)
+    });
+  });
 }
 
 
