@@ -17,6 +17,7 @@ from app.config import BaseConfig
 
 class TestConfig(BaseConfig):
     TESTING = True
+    LOGIN_DISABLED = False
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
     SECRET_KEY = 'test-secret-key-for-testing-only'

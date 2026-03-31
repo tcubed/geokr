@@ -59,60 +59,107 @@ def get_active_team(user):
     team_id = session.get('active_team_id')
     if team_id:
         team = Team.query.get(team_id)
-        if team and team in [m.team for m in user.team_memberships]:
+        membership = TeamMembership.query.filter_by(
+            user_id=user.id,
+            team_id=team_id,
+        ).first()
+        if team and membership:
             return team
         # If session team is not valid, fall through to default behavior
 
     # Default to the first team in their memberships if no active team is set
-    if user.team_memberships:
-        first_membership = user.team_memberships[0]
-        session['active_team_id'] = first_membership.team.id
+    first_membership = (
+        TeamMembership.query
+        .filter_by(user_id=user.id)
+        .order_by(TeamMembership.id)
+        .first()
+    )
+    if first_membership:
+        session['active_team_id'] = first_membership.team_id
         return first_membership.team
         
     return None
 
 @main_bp.route('/')
 def index():
-    #team_id = session.get('active_team_id')
     if not current_user.is_authenticated:
-        return redirect(url_for("auth.register_or_login"))
-    
-    return redirect(url_for('main.findloc'))
-    # if current_user.is_authenticated:
-    #     #return redirect(url_for('main.main_page'))
-    #     team_id = session.get('active_team_id')
-    #     if team_id:
-    #         team = Team.query.get(team_id)
-    #         print('team:',team)
-    #         if team and team.game and team.game.gametype:
-    #             print('team.game: ',team.game)
-    #             gametype = team.game.gametype.name.lower()
-    #             print('gametype: ',gametype)
-    #             #if gametype == 'navigation':
-    #             #    return redirect(url_for('main.main_page', #game_id=team.game.id
-    #             #                           ))
-    #             #el
-    #             if gametype == 'findloc':
-    #                 return redirect(url_for('main.findloc', #game_id=team.game.id
-    #                                         ))
-    #             else:
-    #                 flash("Unsupported game type for this team.", "warning")
-    #         else:
-    #             flash("Could not find valid team or game info.", "warning")
-    #     else:
-    #         flash("No active team selected.", "warning")
-    
-    # #return redirect(url_for("auth.login"))  # or render landing page template
-    # return redirect(url_for("auth.register_or_login"))  # or render landing page template
+        return redirect(url_for('auth.register_or_login'))
 
-    # Show games whose start date is no older than yesterday
-    #yesterday = datetime.utcnow() - timedelta(days=1)
-    #games = Game.query.filter(Game.start_time >= yesterday).all()
-    #return render_template('index.html', games=games)
+    team = get_active_team(current_user)
+    if not team:
+        return redirect(url_for('main.account'))
+
+    gametype = (
+        team.game.gametype.name.lower()
+        if (team.game and team.game.gametype)
+        else None
+    )
+
+    if gametype == 'findloc':
+        return redirect(url_for('main.findloc'))
+    elif gametype == 'map_hunt':
+        return redirect(url_for('main.map_page'))
+    else:
+        flash('No active game type configured for your team.', 'warning')
+        return redirect(url_for('main.account'))
 
 #================================================================
 # MAP GAME
 #================================================================
+@main_bp.route('/map')
+@login_required
+def map_page():
+    team = get_active_team(current_user)
+    if not team:
+        flash('You must join or create a team to play.', 'info')
+        return redirect(url_for('main.account'))
+
+    game = team.game
+    assignments = (
+        TeamLocationAssignment.query
+        .filter_by(team_id=team.id)
+        .order_by(TeamLocationAssignment.order_index)
+        .all()
+    )
+
+    locations = []
+    for assignment in assignments:
+        loc = assignment.location
+        img_url = url_for('static', filename=f'images/{loc.image_url}') if loc.image_url else None
+        locations.append({
+            'id': loc.id,
+            'name': loc.name,
+            'lat': float(loc.latitude) if loc.latitude is not None else None,
+            'lon': float(loc.longitude) if loc.longitude is not None else None,
+            'clue_text': loc.clue_text,
+            'image_url': img_url,
+            'found': assignment.found,
+            'show_pin': loc.show_pin,  # None = use game default (show); True/False = explicit
+        })
+
+    found_count = sum(1 for loc in locations if loc['found'])
+    completion_duration = (
+        team.end_time - team.start_time
+        if team.end_time and team.start_time else None
+    )
+
+    def format_timedelta(td):
+        total_seconds = int(td.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours}h {minutes}m {seconds}s"
+
+    return render_template(
+        'map/play.html',
+        game=game,
+        team=team,
+        locations=locations,
+        found_count=found_count,
+        total_count=len(locations),
+        completion_duration=format_timedelta(completion_duration) if completion_duration else None,
+    )
+
+
 @main_bp.route('/main')
 @login_required
 def main_page():

@@ -99,10 +99,18 @@ def create_app(config_class=DevConfig):
         setup_admin(app)
 
         db.create_all()
+        _ensure_gametypes()
 
-    
-    
     return app
+
+
+def _ensure_gametypes():
+    """Idempotently seed canonical GameType records."""
+    from app.models import GameType
+    for name in ['findloc', 'map_hunt']:
+        if not GameType.query.filter_by(name=name).first():
+            db.session.add(GameType(name=name))
+    db.session.commit()
 
 
 @login_manager.user_loader
