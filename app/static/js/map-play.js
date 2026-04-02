@@ -20,13 +20,29 @@ function createClientEventId() {
 
 function getSyncElements() {
   return {
-    syncPanel: document.getElementById('sync-status-panel'),
+    syncPanel: document.getElementById('sync-toolbar'),
+    syncToggle: document.getElementById('sync-toolbar-toggle'),
     pendingBadge: document.getElementById('pending-badge'),
     pendingCount: document.getElementById('pending-count'),
     syncStateText: document.getElementById('sync-state-text'),
     syncNowButton: document.getElementById('sync-now-btn'),
     allowCellularCheckbox: document.getElementById('allow-cellular-sync'),
   };
+}
+
+let syncToolbarPinnedOpen = false;
+
+function setSyncToolbarExpanded(expanded, { userAction = false } = {}) {
+  const { syncPanel, syncToggle } = getSyncElements();
+  if (!syncPanel) return;
+
+  syncPanel.classList.toggle('sync-collapsed', !expanded);
+  if (syncToggle) {
+    syncToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+  if (userAction) {
+    syncToolbarPinnedOpen = expanded;
+  }
 }
 
 function setSyncPanelIdle(isIdle) {
@@ -214,15 +230,20 @@ async function createMapController() {
 
     if (syncInProgress) {
       setSyncPanelIdle(false);
+      setSyncToolbarExpanded(true);
       setSyncText('Sync in progress…', 'primary');
       return;
     }
     if (summary.total === 0) {
       setSyncPanelIdle(networkState.online);
+      if (!syncToolbarPinnedOpen && networkState.online) {
+        setSyncToolbarExpanded(false);
+      }
       setSyncText(networkState.online ? 'All progress synced.' : 'Offline. New finds will queue locally.', networkState.online ? 'success' : 'warning');
       return;
     }
     setSyncPanelIdle(false);
+    setSyncToolbarExpanded(true);
     if (!networkState.online) {
       setSyncText(`${summary.total} pending. Reconnect to sync.`, 'warning');
       return;
@@ -340,7 +361,14 @@ async function createMapController() {
     btn.addEventListener('click', () => markFound(locId, btn), { once: true });
   }
 
-  const { syncNowButton, allowCellularCheckbox } = getSyncElements();
+  const { syncNowButton, allowCellularCheckbox, syncToggle } = getSyncElements();
+  if (syncToggle) {
+    syncToggle.addEventListener('click', () => {
+      const { syncPanel } = getSyncElements();
+      const isCollapsed = syncPanel?.classList.contains('sync-collapsed');
+      setSyncToolbarExpanded(Boolean(isCollapsed), { userAction: true });
+    });
+  }
   if (syncNowButton) {
     syncNowButton.addEventListener('click', () => runSync({ manual: true }).catch(console.error));
   }

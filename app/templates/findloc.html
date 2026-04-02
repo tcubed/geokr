@@ -252,93 +252,133 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     }
 }
 
-#sync-status {
-  position: fixed;
-  right: 12px;
-  bottom: 12px;
-  z-index: 10000;
+.sync-toolbar {
+  background: rgba(255,255,255,0.96);
+  border-bottom: 1px solid rgba(13, 110, 253, 0.12);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   font-family: system-ui;
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-  max-width: min(320px, calc(100vw - 24px));
+  position: relative;
+  z-index: 1010;
 }
 
-#sync-status-card {
-  background: rgba(255,255,255,0.94);
-  border-radius: 12px;
-  padding: 7px 9px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  min-width: 200px;
-  font-size: 0.9rem;
-  opacity: 1;
-  transition: opacity 180ms ease, box-shadow 180ms ease, transform 180ms ease;
-}
-
-#sync-status.sync-idle #sync-status-card {
+.sync-toolbar.sync-idle {
   opacity: 0.7;
+  transition: opacity 180ms ease, box-shadow 180ms ease;
 }
 
-#sync-status.sync-idle:hover #sync-status-card,
-#sync-status.sync-idle:focus-within #sync-status-card {
+.sync-toolbar.sync-idle:hover,
+.sync-toolbar.sync-idle:focus-within {
   opacity: 1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
-  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.sync-toolbar-inner {
+  padding: 0.35rem 0.75rem;
+}
+
+.sync-toolbar-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.sync-toolbar-message {
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+.sync-toolbar-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sync-toolbar-toggle-icon {
+  font-size: 0.9rem;
+  color: #6c757d;
+  transition: transform 180ms ease;
+}
+
+.sync-toolbar:not(.sync-collapsed) .sync-toolbar-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.sync-toolbar-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 0.35rem;
+}
+
+.sync-toolbar.sync-collapsed .sync-toolbar-body {
+  display: none;
 }
 
 #pending-badge {
   background:#f59e0b;
   color:#fff;
-  padding:3px 7px;
+  padding:2px 7px;
   border-radius:12px;
   font-size:11px;
   display:none;
 }
 
-#sync-status-card .small {
+.sync-toolbar-body .small,
+.sync-toolbar-message.small {
   font-size: 0.8rem !important;
 }
 
-.sync-status-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.sync-status-controls .form-check {
-  min-width: 0;
-}
-
-.sync-status-controls .form-check-label {
+.sync-toolbar-body .form-check-label {
   white-space: nowrap;
 }
 
 @media (max-width: 576px) {
-  #sync-status {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    flex-direction: column;
-    align-items: stretch;
+  .sync-toolbar-inner {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
-  #sync-status-card {
-    min-width: 0;
-    width: 100%;
+  .sync-toolbar-body {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px 12px;
   }
 
-  .sync-status-controls {
-    gap: 6px;
-  }
-
-  .sync-status-controls .form-check-label {
+  .sync-toolbar-body .form-check-label {
     font-size: 0.76rem;
   }
 }
 </style>
 
+{% endblock %}
+{% block subnav %}
+<div id="sync-toolbar" class="sync-toolbar sync-collapsed sync-idle">
+  <div class="sync-toolbar-inner">
+    <button id="sync-toolbar-toggle" class="sync-toolbar-summary" type="button" aria-expanded="false" aria-controls="sync-toolbar-body">
+      <div id="sync-state-text" class="sync-toolbar-message small text-muted">Checking sync status…</div>
+      <div class="sync-toolbar-summary-right">
+        <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
+        <i class="bi bi-chevron-down sync-toolbar-toggle-icon" aria-hidden="true"></i>
+      </div>
+    </button>
+    <div id="sync-toolbar-body" class="sync-toolbar-body">
+      <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
+      <div class="form-check m-0">
+        <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
+        <label class="form-check-label small" for="allow-cellular-sync">Allow cellular</label>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block content %}
 <div id="game-data"
@@ -458,21 +498,6 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
 
 
-<div id="sync-status">
-  <div id="pending-badge">
-    ⏳ <span id="pending-count">0</span> pending
-  </div>
-  <div id="sync-status-card">
-    <div id="sync-state-text" class="small text-muted">Checking sync status…</div>
-    <div class="sync-status-controls">
-      <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
-      <div class="form-check m-0">
-        <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
-        <label class="form-check-label small" for="allow-cellular-sync">Allow cellular</label>
-      </div>
-    </div>
-  </div>
-</div>
 <!-- Toast container -->
 <div id="sync-toast-container" style="position: fixed; bottom: 20px; right: 20px; max-width: 300px; display: flex; flex-direction: column; gap: 8px; z-index:10001;"></div>
 
