@@ -97,23 +97,12 @@
     gap: 8px;
     flex-shrink: 0;
   }
-  .sync-toolbar-toggle-icon {
-    font-size: 0.9rem;
-    color: #6c757d;
-    transition: transform 180ms ease;
-  }
-  .sync-toolbar:not(.sync-collapsed) .sync-toolbar-toggle-icon {
-    transform: rotate(180deg);
-  }
   .sync-toolbar-body {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding-top: 0.35rem;
-  }
-  .sync-toolbar.sync-collapsed .sync-toolbar-body {
-    display: none;
   }
   #pending-badge {
     background: #f59e0b;
@@ -148,15 +137,14 @@
 {% endblock %}
 
 {% block subnav %}
-<div id="sync-toolbar" class="sync-toolbar sync-collapsed sync-idle">
+<div id="sync-toolbar" class="sync-toolbar sync-idle">
   <div class="sync-toolbar-inner">
-    <button id="sync-toolbar-toggle" class="sync-toolbar-summary" type="button" aria-expanded="false" aria-controls="sync-toolbar-body">
+    <div class="sync-toolbar-summary">
       <div id="sync-state-text" class="sync-toolbar-message small text-muted">Checking sync status…</div>
       <div class="sync-toolbar-summary-right">
         <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
-        <i class="bi bi-chevron-down sync-toolbar-toggle-icon" aria-hidden="true"></i>
       </div>
-    </button>
+    </div>
     <div id="sync-toolbar-body" class="sync-toolbar-body">
       <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
       <div class="form-check m-0">

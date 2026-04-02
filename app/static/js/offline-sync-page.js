@@ -303,9 +303,19 @@
 
         // 1. Update from server
         gameState.currentIndex = data.current_index;
-        data.locations_found.forEach((loc, idx) => {
-          if (gameState.locations[idx]) {
-            gameState.locations[idx].found = loc.found;
+        gameState.locations.forEach((location) => {
+          location.isOffline = false;
+        });
+
+        data.locations_found.forEach((loc) => {
+          const existing = gameState.locations.find(location => String(location.id) === String(loc.location_id));
+          if (existing) {
+            const wasPending = Boolean(existing.isOffline);
+            existing.found = loc.found;
+            existing.isOffline = false;
+            if (loc.found && wasPending) {
+              existing.syncedAt = Date.now();
+            }
           }
         });
 
@@ -319,6 +329,8 @@
             const idx = gameState.locations.findIndex(l => l.id == u.body.location_id);
             if (idx !== -1) {
               gameState.locations[idx].found = true;
+              gameState.locations[idx].isOffline = true;
+              gameState.locations[idx].syncedAt = null;
               if (idx >= gameState.currentIndex) gameState.currentIndex = idx + 1;
               console.log(`[offlineSync] Offline update applied: location_id=${u.body.location_id}, index=${idx}`);
             }

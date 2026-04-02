@@ -57,26 +57,10 @@ function getSubmissionCoordinates(methodResult, locationId) {
 function getSyncUIElements() {
   return {
     syncPanel: document.getElementById('sync-toolbar'),
-    syncToggle: document.getElementById('sync-toolbar-toggle'),
     statusText: document.getElementById('sync-state-text'),
     syncNowButton: document.getElementById('sync-now-btn'),
     allowCellularCheckbox: document.getElementById('allow-cellular-sync'),
   };
-}
-
-let syncToolbarPinnedOpen = false;
-
-function setSyncToolbarExpanded(expanded, { userAction = false } = {}) {
-  const { syncPanel, syncToggle } = getSyncUIElements();
-  if (!syncPanel) return;
-
-  syncPanel.classList.toggle('sync-collapsed', !expanded);
-  if (syncToggle) {
-    syncToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  }
-  if (userAction) {
-    syncToolbarPinnedOpen = expanded;
-  }
 }
 
 function setSyncPanelIdle(isIdle) {
@@ -119,16 +103,12 @@ async function refreshSyncStatus() {
 
   if (syncInProgress) {
     setSyncPanelIdle(false);
-    setSyncToolbarExpanded(true);
     setSyncStatusText('Sync in progress…', 'primary');
     return;
   }
 
   if (summary.total === 0) {
     setSyncPanelIdle(networkState.online);
-    if (!syncToolbarPinnedOpen && networkState.online) {
-      setSyncToolbarExpanded(false);
-    }
     setSyncStatusText(
       networkState.online ? 'All progress synced.' : 'Offline. New finds will queue locally.',
       networkState.online ? 'success' : 'warning'
@@ -137,7 +117,6 @@ async function refreshSyncStatus() {
   }
 
   setSyncPanelIdle(false);
-  setSyncToolbarExpanded(true);
 
   if (!networkState.online) {
     setSyncStatusText(`${summary.total} pending. Reconnect to sync.`, 'warning');
@@ -196,15 +175,7 @@ async function runSync({ manual = false } = {}) {
 }
 
 function initializeSyncControls() {
-  const { syncNowButton, allowCellularCheckbox, syncToggle } = getSyncUIElements();
-
-  if (syncToggle) {
-    syncToggle.addEventListener('click', () => {
-      const { syncPanel } = getSyncUIElements();
-      const isCollapsed = syncPanel?.classList.contains('sync-collapsed');
-      setSyncToolbarExpanded(Boolean(isCollapsed), { userAction: true });
-    });
-  }
+  const { syncNowButton, allowCellularCheckbox } = getSyncUIElements();
 
   if (allowCellularCheckbox) {
     allowCellularCheckbox.checked = getAllowCellularSync();
