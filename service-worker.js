@@ -17,10 +17,13 @@ const APP_SHELL_FILES = [
   '/static/js/login.js',
   //'/static/js/prefetch.js',
   '/static/js/findloc.js',
+  '/static/js/app-init.js',
   '/static/js/offline-game.js',
   '/static/js/offline-db.js',
+  '/static/js/offline-play.js',
   '/static/js/offline-sync-page.js',
   '/static/js/offline-sync-sw.js',
+  '/static/js/map-play.js',
   '/static/js/validate.js',
   '/static/js/localStorage.js',
   '/static/js/account.js',
@@ -52,14 +55,10 @@ const APP_SHELL_FILES = [
 
 
 const TILE_URL_REGEX = /^https:\/\/tile\.openstreetmap\.org\/(\d+)\/(\d+)\/(\d+)\.png$/;
-
+importScripts('/static/js/offline-db.js');
 importScripts('/static/js/offline-sync-sw.js'); // must be self-contained
 
-const offlineDB = {
-  async addUpdate(update) { /* indexedDB add logic */ },
-  async getAllUpdates(opts) { /* indexedDB get logic */ },
-  async deleteUpdate(id) { /* indexedDB delete logic */ }
-};
+const offlineDB = self.offlineDB;
 
 /*
  * Fetch with a caching strategy
@@ -285,7 +284,7 @@ self.addEventListener('activate', (event) => {
    ================================================*/
 self.addEventListener('sync', event => {
   console.log('[SW] Sync event triggered:', event.tag);
-  if (event.tag === 'sync-found-locations') {
+  if (event.tag === 'sync-found-locations' || event.tag.startsWith('sync-found-locations-')) {
     console.log('[SW] Syncing queued location updates...');
     event.waitUntil(
       syncAllQueuedUpdates({
@@ -418,7 +417,7 @@ self.addEventListener('fetch', event => {
 
 
   // ---- POST requests (offline-sync) ----
-  if (event.request.method === 'POST' && url.pathname.startsWith('/api/location/found')) {
+  if (event.request.method === 'POST' && /^\/api\/location\/\d+\/found$/.test(url.pathname)) {
     event.respondWith(
       (async () => {
         try {

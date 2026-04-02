@@ -2,10 +2,10 @@
 {% block content %}
 <script>
   // Store the resume token for future auto-login
-  localStorage.setItem("resumeToken", "{{ resume_token }}");
+  localStorage.setItem("resumeToken", {{ resume_token | tojson }});
 
   // Redirect to account or game page
-  window.location.href = "{{ url_for('main.account') }}";
+  window.location.href = {{ redirect_url | tojson }};
 </script>
 <p>Welcome back, {{ display_name }}! Redirecting...</p>
 {% endblock %}

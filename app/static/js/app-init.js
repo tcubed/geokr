@@ -2,6 +2,7 @@
 import { showToast } from './common-ui.js';
 import { initGame, updateClueVisibility,renderCluesFromState, updatePendingBadge } from './findloc.js';
 import { setupValidationButtons } from './validate.js';
+import { applyFindlocOfflineBundle } from './offline-play.js';
 import { waitForSelector, watchContainer, sleep } from './utils.js';
 //import { syncWithServer } from './offline-sync.js'; // Import the sync function
 
@@ -24,6 +25,21 @@ export async function startApp() {
   console.log('[App Init] Starting...');
 
   try {
+    const liveFlags = {
+      enable_geolocation: window.GAME_DATA?.enable_geolocation,
+      enable_selfie: window.GAME_DATA?.enable_selfie,
+      enable_image_verify: window.GAME_DATA?.enable_image_verify,
+      enable_qr_scanner: window.GAME_DATA?.enable_qr_scanner,
+      bounds: window.GAME_DATA?.bounds,
+    };
+
+    const hydratedFromBundle = await applyFindlocOfflineBundle({
+      gameId: window.GAME_CONTEXT?.gameId,
+      teamId: window.GAME_CONTEXT?.teamId,
+      liveFlags,
+      force: !navigator.onLine || !(window.GAME_DATA?.locations?.length),
+    });
+
     // 1️⃣ Load/init game state
     await initGame();
     //enableDebugProxy();
@@ -42,7 +58,7 @@ export async function startApp() {
     // It should call renderCluesFromState() to update the UI.
 
     // 2️⃣ Update pending offline updates
-    updatePendingBadge();
+    await updatePendingBadge();
 
     // Notify user if there are offline updates
     const count = await offlineDB.count();
@@ -50,16 +66,24 @@ export async function startApp() {
       showToast(`You have ${count} pending update${count === 1 ? '' : 's'}`, { type: 'warning' });
     }
 
+    if (hydratedFromBundle) {
+      showToast('Loaded saved offline bundle for this game.', { type: 'info' });
+    }
+
     // 3️⃣ Sync with server if online
     if (navigator.onLine && window.GAME_DATA?.gameId) {
-      await syncWithServer({
-        gameId: GAME_DATA.gameId,
-        teamId: GAME_DATA.teamId,
-        offlineDB
-      });
-      await updatePendingBadge();
-      // After sync, re-render to reflect any server-side changes
-      renderCluesFromState();
+      try {
+        await syncWithServer({
+          gameId: GAME_DATA.gameId,
+          teamId: GAME_DATA.teamId,
+          offlineDB
+        });
+        await updatePendingBadge();
+        // After sync, re-render to reflect any server-side changes
+        renderCluesFromState();
+      } catch (err) {
+        console.warn('[App Init] Live sync failed; keeping local/offline state:', err);
+      }
     }
 
     // 6️⃣ Listen for future online events
@@ -185,9 +209,6 @@ document.addEventListener('DOMContentLoaded', startApp);
 export function observeClues() {
   watchContainer('#clues-container', revealUnlockedClues);
 }
-
-// Auto-start app on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', startApp);
 
 // // ---------------- DEBUG GAME STATE ----------------
 // if (window.DEBUG_GAME_STATE) {

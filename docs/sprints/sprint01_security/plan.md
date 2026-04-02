@@ -183,14 +183,14 @@ git push origin v1.0.1-security   # if using remote
 
 ## Checklist
 
-- [ ] Phase 0 — Tag `v1.0`
-- [ ] Phase 1 — Create `.env.example`
-- [ ] Phase 2 — Remove hardcoded `app.secret_key` from `__init__.py`
-- [ ] Phase 3 — Add `SESSION_COOKIE_SECURE` / `REMEMBER_COOKIE_SECURE = True` to `ProdConfig`
-- [ ] Phase 4 — Delete basic auth functions; re-protect dev routes with `@admin_required`
-- [ ] Phase 5 — Delete legacy password auth commented code in `auth.py`; remove unreachable code in `magic_login()`
-- [ ] Phase 6 — Add tests (`tests/`, conftest, config/auth/admin coverage)
-- [ ] Phase 7 — Commit and tag `v1.0.1-security`
+- [x] Phase 0 — Tag `v1.0` *(tagged and pushed to origin)*
+- [x] Phase 1 — Create `.env.example`
+- [x] Phase 2 — Remove hardcoded `app.secret_key` from `__init__.py`
+- [x] Phase 3 — Add `SESSION_COOKIE_SECURE` / `REMEMBER_COOKIE_SECURE = True` to `ProdConfig`
+- [x] Phase 4 — Delete basic auth functions; re-protect dev routes with `@admin_required` *(9 routes updated; `/admin/api/games` was also completely unprotected — fixed)*
+- [x] Phase 5 — Delete legacy password auth commented code in `auth.py`; remove unreachable code in `magic_login()` *(see review-0330.md Sprint B note re: magic_success.html resume token)*
+- [x] Phase 6 — Add tests — 27 tests passing (`pytest tests/`) *(note: admin blueprint URL prefix is `/admin/`; non-admin access correctly returns 302 redirect, not 403 — both mean denied)*
+- [x] Phase 7 — Commit and tag `v1.0.1-security`
 
 ---
 

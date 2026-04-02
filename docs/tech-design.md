@@ -28,6 +28,22 @@ The system is built with:
 3. **Team-based gameplay:** Each team’s progress is tracked independently, with all team members able to see progress.
 4. **Modular, maintainable frontend:** Separation of UI, offline logic, and game state management.
 5. **Scalable backend:** Support multiple simultaneous games and teams with minimal configuration.
+6. **Fail-safe offline behavior:** If sync state is uncertain, the UI must prefer explicit pending/error states over false success.
+7. **Data-usage safety:** Prefetch and sync should prefer Wi‑Fi, with cellular used only by explicit user consent or clearly disclosed fallback behavior.
+
+---
+
+## 2.1 Offline Engineering Principles
+
+These principles apply to all offline-first design and implementation work:
+
+1. **Offline mode must fail safe.** Never represent uncertain sync state as confirmed success.
+2. **Sync state must always be visible.** Users should be able to distinguish synced, pending, failed, and waiting states.
+3. **Cellular data must never be consumed silently.** Wi‑Fi is the preferred path; cellular is fallback only.
+4. **Acknowledged offline progress must be durable.** Once the UI accepts a found action locally, that event must survive reloads and reconnect attempts.
+5. **Manual sync is the reliability baseline.** Automatic/background sync is a later enhancement, not the first dependency.
+6. **Recovery paths must be explicit.** Retry, resume, and error handling should be understandable by both players and operators.
+7. **Real-device testing is mandatory.** Desktop simulation alone is not sufficient for rollout.
 
 ---
 
@@ -60,6 +76,14 @@ The system is built with:
    * Marks locations as found
    * Actions queued in IndexedDB
 5. Once online, queued actions are synced back to the server.
+
+**Sync policy:**
+- Prefer sync on Wi‑Fi.
+- If network type cannot be determined reliably, require explicit user approval before using a metered/cellular connection.
+- Manual sync must remain available even if automatic sync is deferred or unsupported.
+
+**State integrity rule:**
+- A locally accepted found-event must be persisted before the UI treats it as pending/offline-complete.
 
 ---
 
@@ -171,6 +195,13 @@ class TeamLocationAssignment(db.Model):
 * **localStorage:** Caches small pieces of state for faster UI updates.
 * **Service Worker:** Intercepts fetch requests for assets and API calls, queues updates when offline.
 
+**Operational rules:**
+
+* Offline queue entries must be durable and replayable.
+* The client must track and expose sync state, not just gameplay state.
+* Asset prefetch should be Wi‑Fi-first and disclose expected download cost when possible.
+* Automatic sync should not be trusted until manual sync is proven reliable.
+
 ### 6.3 Game Logic Flow
 
 1. **Initialization (`app-init.js`):**
@@ -192,8 +223,15 @@ class TeamLocationAssignment(db.Model):
 3. **Offline Sync (`offline-sync.js`):**
 
    * Queue “found” actions in IndexedDB
-   * When online, POST to `/api/sync`
+  * When online, POST to `/api/sync`
    * Update local IndexedDB and frontend UI to reflect server response
+
+**Recommended sequencing:**
+
+1. durable local queue
+2. manual sync action
+3. reconnect detection
+4. Wi‑Fi-preferred automatic sync
 
 ---
 
@@ -211,7 +249,13 @@ class TeamLocationAssignment(db.Model):
 * Offline users receive **full prefetch of assets** at game start
 * Responsive UI for mobile and desktop
 * Visual indication of **offline vs online** mode
-* Team progress synced automatically, with minimal latency
+* Visual indication of **sync state**: synced, pending, failed, waiting for Wi‑Fi
+* Team progress should sync with minimal latency when safe to do so
+* Cellular data usage should never be hidden from the player
+
+**UX rule:**
+
+The app must never leave the player guessing whether a found action is safely stored, still pending, or already synced.
 
 ---
 
@@ -234,6 +278,18 @@ class TeamLocationAssignment(db.Model):
   * Unit tests for Flask API
   * Integration tests for offline sync
   * Manual testing for offline-first UX
+  * Real-device testing on iPhone Safari and Android Chrome
+  * Field rehearsal with forced offline segments before production use
+
+**Release gate for offline features:**
+
+Offline mode should remain disabled for production events unless:
+
+* prefetched gameplay works fully offline,
+* pending events survive reloads,
+* manual sync works reliably,
+* cellular fallback is explicit,
+* and field rehearsal confirms no progress loss.
 
 ---
 

@@ -4,6 +4,12 @@
 **App:** GeoKR / GeoGame — location-based team scavenger hunt  
 **Status at review:** Post-beta-1, targeting MVP+  
 
+> **Sprint 01 (Security Hardening) completed March 30, 2026 — tagged `v1.0.1-security`.**  
+> All immediate recommendations from Section 8 have been addressed except camera UX (deferred) and `password_hash` migration (deferred). See [docs/sprints/sprint01_security/plan.md](sprints/sprint01_security/plan.md).  
+>
+> **Sprint 02 (Map Mode Game Experience) completed in code and tests on March 30, 2026.**  
+> The `map_hunt` game type is now seeded, dispatched from `index()`, rendered at `/map`, and covered by regression tests. Release/tag step remains manual. See [docs/sprints/sprint02_mapmode/plan.md](sprints/sprint02_mapmode/plan.md).
+
 ---
 
 ## 1. Overall Impression
@@ -49,11 +55,11 @@ The app uses **magic-link email authentication** via `itsdangerous.URLSafeTimedS
 
 ### Concerns
 
-- **`SECRET_KEY` hardcoded in `__init__.py`:** `app.secret_key = 'your-secret-ballroom'` should be removed. The `config.py` already picks it up from `os.getenv("SECRET_KEY")`. The hardcoded value in `create_app()` overrides the safe one.
-- **`SESSION_COOKIE_SECURE = False`** in both Dev and Prod configs. This is correct for dev, but `ProdConfig` should set it to `True` and it is not doing so. When deployed to HTTPS, session cookies will be readable over HTTP if this is overlooked.
+- ~~**`SECRET_KEY` hardcoded in `__init__.py`**~~ ✅ *Fixed in Sprint 01 — line removed.*
+- ~~**`SESSION_COOKIE_SECURE = False`** in both Dev and Prod configs~~ ✅ *Fixed in Sprint 01 — `ProdConfig` now sets both secure cookie flags to `True`.*
 - **Email dependency as a hard gate:** If `Flask-Mail` misconfigures (bad SMTP creds, email provider blocks, etc.), the user simply cannot log in. There is no fallback. For a beta/event context you may want an admin-bypass mechanism (e.g., a signed URL that skips mail send) for when players are on-site.
 - The `serializer` in `auth.py` is instantiated at module import time using `current_app.config['SECRET_KEY']` — this works only because of Flask's application context, but it's subtle. It will silently fail if ever imported outside an app context during testing.
-- `/load_sample_data` in `admin/routes.py` uses HTTP Basic Auth with hardcoded credentials (`admin` / `secret`). This should be removed or replaced before any public deployment.
+- ~~`/load_sample_data` in `admin/routes.py` uses HTTP Basic Auth with hardcoded credentials (`admin` / `secret`)~~ ✅ *Fixed in Sprint 01 — Basic Auth stub removed; all admin routes now protected by `@admin_required`.*
 
 ---
 
@@ -64,7 +70,7 @@ The app uses **magic-link email authentication** via `itsdangerous.URLSafeTimedS
 - The **service worker** properly handles three cache domains: app shell, tiles, and images — and falls back gracefully. The architecture (fetch-with-strategy pattern in SW) is well-designed.
 - The **API routes** (`/api/*`) are clearly separated from page routes, and the JS client calls them via `fetch`. This clean boundary is what makes offline-sync feasible.
 - **Branding** is injected per-game via `game.data.branding` and surfaced through a context processor, not hardcoded in templates. This is the right pattern for a multi-client product.
-- **`admin_required` decorator** is duplicated in `api/routes.py` and `admin/routes.py`. Should live in a shared `decorators.py`.
+- **`admin_required` decorator** is duplicated in `api/routes.py` and `admin/routes.py`. Should live in a shared `decorators.py`. *(Still open — deferred from Sprint 01.)*
 
 ### What Needs Attention
 
@@ -89,12 +95,12 @@ The app uses **magic-link email authentication** via `itsdangerous.URLSafeTimedS
 | GPS proximity validation | ⚠️ Partial | Code exists, not fully active in live flow |
 | QR / image verification | ⚠️ Gated off | Feature flags in template, not yet live |
 | Offline game progress sync | ⚠️ In-progress | JS modules exist, backend sync not complete |
-| Map-based game mode | 🔲 Stubbed | `/main` route and templates exist, not active |
-| Production config (HTTPS, secure cookies) | ⚠️ Needs fix | `SESSION_COOKIE_SECURE` not set for prod |
+| Map-based game mode | ✅ Functional | `map_hunt` dispatch active, `/map` route and `map/play.html` working |
+| Production config (HTTPS, secure cookies) | ✅ Fixed | Sprint 01 — `v1.0.1-security` |
 | Error handling / 403/404 pages | ⚠️ Minimal | Flask defaults in use |
-| Test coverage | 🔲 None | No test directory found |
+| Test coverage | ✅ Expanded | 39 tests passing, including Sprint 02 map-mode coverage |
 
-**MVP verdict:** The app is functional and deployable for controlled events. The core game loop — team joins a game, receives an ordered route of locations, marks them found — works end to end. The known gaps (camera UX, prod config hardening) are acceptable for continued beta. The app is at **MVP-ready with low risk** for controlled/invited events, and **not yet ready** for open public deployment due to the security config gaps noted.
+**MVP verdict:** The app is functional and deployable for controlled events. The core game loop — team joins a game, receives an ordered route of locations, marks them found — works end to end. Security config gaps from the initial review have been closed in Sprint 01 (`v1.0.1-security`), and Sprint 02 has now activated the map-hunt mode as a second playable experience. The remaining open items are camera UX polish and the longer-horizon offline/sync features.
 
 ---
 
@@ -122,15 +128,25 @@ These are proposed as bounded sprints, ordered roughly by dependency and value. 
 
 **Goal:** Allow a game type where players are shown a map and must navigate to find a location pin (vs. receiving sequential clue text).
 
-**What exists:** `/main` route, `map.js`, `map/debug.html`, `map/map_prefetch.html`, Leaflet already in service worker cache list.
+**Status:** ✅ Implemented on March 30, 2026.
 
-**What's needed:**
-- Activate the `gametype` dispatcher in the index route (currently commented out).
-- Build `map/play.html` template using the existing Leaflet integration.
-- Add UI to show the target pin (or a radius zone) and trigger "found" on proximity.
-- `show_pin` column on `Location` is already in the model — use it to control pin visibility per game.
+**Delivered:**
+- canonical `GameType` seeding for `findloc` and `map_hunt`
+- gametype-aware dispatch from `/`
+- new `/map` route for active `map_hunt` teams
+- `map/play.html` Leaflet UI with progress HUD and popup actions
+- "I'm Here" integration with existing `/api/location/<id>/found` endpoint
+- test coverage for dispatcher, route access, and rendered map payload
+- bug fix in `get_active_team()` so active-team selection is validated by membership query rather than ORM instance identity
 
-**Effort estimate:** Medium. The hard parts (Leaflet, geolocation, found-API) are already in place.
+**What exists:** `/main` legacy route, `map.js`, `map/debug.html`, `map/map_prefetch.html`, Leaflet already in service worker cache list.
+
+**Remaining follow-up (optional, not blocker for Sprint 02 completion):**
+- retire or repurpose the legacy `/main` route once the map path is fully adopted
+- decide whether map_hunt should support a game-level default for `show_pin = None`
+- add polish around completion UI and operator documentation/screenshots
+
+**Outcome:** Medium effort, completed successfully because the hard parts (Leaflet, geolocation, found API) were already in place.
 
 ---
 
@@ -186,12 +202,12 @@ These are proposed as bounded sprints, ordered roughly by dependency and value. 
 
 ## 8. Immediate Recommendations Before Next Beta
 
-1. **Remove the hardcoded `app.secret_key` in `__init__.py`** — it overrides the env-based config and is a security risk.
-2. **Set `SESSION_COOKIE_SECURE = True` in `ProdConfig`** (and ensure deployment runs behind HTTPS).
-3. **Add a "skip / admin-confirm" path on the camera step** to unblock players when the camera interface fails.
-4. **Delete or complete `teams/routes.py`** — the `join_team` stub is misleading.
-5. **Remove the Basic Auth stub** in `admin/routes.py` (`check_auth` with `admin/secret`).
-6. **Add a `.env.example`** file documenting required env vars (`SECRET_KEY`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `DATABASE_URL`) — this will save time for any second developer or redeployment.
+1. ~~**Remove the hardcoded `app.secret_key` in `__init__.py`**~~ ✅ *Done — Sprint 01.*
+2. ~~**Set `SESSION_COOKIE_SECURE = True` in `ProdConfig`**~~ ✅ *Done — Sprint 01.*
+3. **Add a "skip / admin-confirm" path on the camera step** to unblock players when the camera interface fails. *(Still open.)*
+4. **Delete or complete `teams/routes.py`** — the `join_team` stub is misleading. *(Still open.)*
+5. ~~**Remove the Basic Auth stub** in `admin/routes.py`~~ ✅ *Done — Sprint 01.*
+6. ~~**Add a `.env.example`** file documenting required env vars~~ ✅ *Done — Sprint 01.*
 
 ---
 

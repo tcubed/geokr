@@ -49,9 +49,15 @@ def test_magic_login_valid_token_redirects_to_findloc(app, client):
     with app.app_context():
         token = generate_magic_token('user@test.com')
     rv = client.get(f'/magic-login?token={token}', follow_redirects=False)
-    # Should redirect (login succeeded) — exact destination may vary by team state
-    assert rv.status_code in (301, 302)
-    assert 'findloc' in rv.location
+    assert rv.status_code == 200
+    assert b'resumeToken' in rv.data
+    assert b'localStorage.setItem' in rv.data
+
+    # Server-side login should still be active after the token handoff page renders.
+    rv2 = client.get('/', follow_redirects=False)
+    assert rv2.status_code in (301, 302)
+    assert 'register_or_login' not in (rv2.location or '')
+    assert '/login' not in (rv2.location or '')
 
 
 def test_logout_redirects_to_login(user_client):

@@ -18,7 +18,8 @@ export function initGame() {
     console.log('[Findloc] gameState after loadState():', window.gameState);
 
     const gs = getGameState();
-    if (gs.locations.length === 0 && window.GAME_DATA) {
+  const shouldHydrateFromPage = Boolean(window.GAME_DATA?.offlineSource) || gs.locations.length === 0;
+  if (shouldHydrateFromPage && window.GAME_DATA) {
         Object.assign(gs, window.GAME_DATA);
         saveState();
         console.log('[Findloc] gameState initialized from server data:', window.gameState);
@@ -130,6 +131,7 @@ export function renderCluesFromState() {
   // Iterate over all locations to render the full accordion structure
   gs.locations.forEach((loc, idx) => {
     const isFound = loc.found;
+    const isPending = Boolean(loc.isOffline);
     const isCurrent = idx === gs.currentIndex;
     
     // Corrected logic: a card is visible if it's found or its index
@@ -142,7 +144,7 @@ export function renderCluesFromState() {
     const geoBtnId = `btn-validate-geo-${loc.id}`;
 
     const cardHtml = `
-      <div class="accordion-item clue-card ${isFound ? 'found-clue' : ''}" 
+      <div class="accordion-item clue-card ${isFound ? 'found-clue' : ''} ${isPending ? 'pending-clue' : ''}" 
            data-clue-index="${idx}"
            data-location-id="${loc.id}"
            style="display: ${isVisible ? 'block' : 'none'};">
@@ -154,6 +156,8 @@ export function renderCluesFromState() {
                   data-bs-target="#collapse-${loc.id}"
                   aria-expanded="${isExpanded ? 'true' : 'false'}">
             ${loc.name}
+            ${isPending ? '<span class="badge rounded-pill bg-warning text-dark ms-2">Pending sync</span>' : ''}
+            ${isFound && !isPending ? '<span class="badge rounded-pill bg-success ms-2">Synced</span>' : ''}
           </button>
         </h2>
 
@@ -168,9 +172,9 @@ export function renderCluesFromState() {
               </div>
             ` : ''}
             <p class="card-text">${loc.clue_text}</p>
-            ${loc.latitude && loc.longitude ? `
+                 ${loc.lat != null && loc.lon != null ? `
               <div id="map-${loc.id}" class="map-container"
-                   data-lat="${loc.latitude}" data-lon="${loc.longitude}" style="height: 200px;"></div>
+                   data-lat="${loc.lat}" data-lon="${loc.lon}" style="height: 200px;"></div>
             ` : ''}
 
             <div id="validation-methods">

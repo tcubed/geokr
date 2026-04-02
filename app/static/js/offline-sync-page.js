@@ -15,6 +15,164 @@
     return Math.round(exp + jitter);
   }
 
+  function isFoundUpdate(update) {
+    return update?.type === 'location_found' || /^\/api\/location\/\d+\/found$/.test(update?.url || '');
+  }
+
+  function buildQueueKey(update) {
+    if (update?.queue_key) return update.queue_key;
+    if (update?.body?.queue_key) return update.body.queue_key;
+
+    if (isFoundUpdate(update)) {
+      const gameId = update?.body?.game_id;
+      const teamId = update?.body?.team_id;
+      const locationId = update?.body?.location_id;
+      if (gameId != null && teamId != null && locationId != null) {
+        return `location_found:${gameId}:${teamId}:${locationId}`;
+      }
+    }
+
+    return null;
+  }
+
+  function serializeUpdateBody(body) {
+    if (!(body instanceof FormData)) return body;
+    return Object.fromEntries(body.entries());
+  }
+
+  function buildFetchOptions(update) {
+    if (update.body instanceof FormData) {
+      return {
+        method: update.method || 'POST',
+        body: update.body,
+        credentials: 'same-origin',
+      };
+    }
+
+    return {
+      method: update.method || 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update.body),
+      credentials: 'same-origin',
+    };
+  }
+
+  async function parseResponsePayload(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        return await response.json();
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function buildResponseError(response, payload) {
+    const message = payload?.error || payload?.message || `Server responded ${response.status}`;
+    const err = new Error(message);
+    err.status = response.status;
+    err.payload = payload;
+    err.isRetryable = response.status >= 500 || response.status === 429 || response.status === 401;
+    err.isPermanent = !err.isRetryable;
+    err.shouldDelete = response.status === 409;
+    return err;
+  }
+
+  async function queueOrUpdate(update, db) {
+    const timestamp = Date.now();
+    const queueKey = buildQueueKey(update);
+    const storedBody = serializeUpdateBody(update.body);
+    const existing = (queueKey && typeof db.findUpdateByQueueKey === 'function')
+      ? await db.findUpdateByQueueKey(queueKey)
+      : null;
+
+    const queuedUpdate = {
+      ...(existing || {}),
+      ...update,
+      id: update.id ?? existing?.id,
+      queue_key: queueKey,
+      body: storedBody,
+      type: update.type || existing?.type || null,
+      game_id: update.game_id ?? existing?.game_id ?? storedBody?.game_id ?? null,
+      team_id: update.team_id ?? existing?.team_id ?? storedBody?.team_id ?? null,
+      location_id: update.location_id ?? existing?.location_id ?? storedBody?.location_id ?? null,
+      timestamp: update.timestamp ?? existing?.timestamp ?? timestamp,
+      first_queued_at: existing?.first_queued_at ?? update.first_queued_at ?? timestamp,
+      lastTried: update.lastTried ?? timestamp,
+      attempts: update.attempts || existing?.attempts || 0,
+      sync_state: 'pending',
+      last_error: null,
+    };
+
+    if (typeof db.putUpdate === 'function') {
+      queuedUpdate.id = await db.putUpdate(queuedUpdate);
+    } else if (!queuedUpdate.id) {
+      queuedUpdate.id = await db.addUpdate(queuedUpdate);
+    } else {
+      await db.deleteUpdate(queuedUpdate.id);
+      queuedUpdate.id = await db.addUpdate(queuedUpdate);
+    }
+
+    return queuedUpdate;
+  }
+
+  async function markQueuedFailure(update, db, err) {
+    const failedUpdate = {
+      ...update,
+      sync_state: err?.isPermanent ? 'failed' : 'pending',
+      last_error: err?.message || null,
+      last_error_status: err?.status || null,
+      last_failure_at: Date.now(),
+    };
+
+    if (typeof db.putUpdate === 'function') {
+      failedUpdate.id = await db.putUpdate(failedUpdate);
+    }
+
+    return failedUpdate;
+  }
+
+  function getNetworkState({ allowCellular = false } = {}) {
+    const connection = root.navigator?.connection || root.navigator?.mozConnection || root.navigator?.webkitConnection;
+    const online = typeof navigator === 'undefined' ? true : navigator.onLine;
+    const type = String(connection?.type || '').toLowerCase();
+    const effectiveType = String(connection?.effectiveType || '').toLowerCase();
+    const saveData = Boolean(connection?.saveData);
+    const isMetered = saveData || type === 'cellular' || /(^|[^a-z])([2345]g)([^a-z]|$)/.test(effectiveType);
+    const waitingForWifi = Boolean(online && isMetered && !allowCellular);
+
+    return {
+      online,
+      type,
+      effectiveType,
+      saveData,
+      isMetered,
+      allowCellular,
+      waitingForWifi,
+      canAutoSync: Boolean(online && !waitingForWifi),
+    };
+  }
+
+  async function getPendingUpdatesSummary({ offlineDB = defaultDB, gameId, teamId } = {}) {
+    const updates = await offlineDB.getAllUpdates({ ordered: true });
+    const filtered = updates.filter((update) => {
+      const matchesGame = gameId == null || String(update.body?.game_id ?? update.game_id) === String(gameId);
+      const matchesTeam = teamId == null || String(update.body?.team_id ?? update.team_id) === String(teamId);
+      return matchesGame && matchesTeam;
+    });
+
+    const failedCount = filtered.filter(update => update.sync_state === 'failed').length;
+
+    return {
+      total: filtered.length,
+      failedCount,
+      pendingCount: filtered.length - failedCount,
+      updates: filtered,
+    };
+  }
+
   async function sendOrQueue(update, { offlineDB, onSuccess, onQueued, onFailure } = {}) {
     const db = offlineDB || root.offlineDB;  // ✅ fallback
 
@@ -22,48 +180,15 @@
     //update.lastTried = Date.now();
     console.log('[offlineSync] Sending update:', update);
     console.log('[Badge] Queuing update body:', update.body);
-
-
     const doQueue = async () => {
-      console.log("doQueue called, offlineDB=", db);
-
-      // Convert body if it's FormData. This ensures it's storable.
-      let bodyToStore = update.body;
-      if (update.body instanceof FormData) {
-          // We're converting a FormData object to a regular object.
-          // This preserves the data but loses the file reference, which is fine
-          // since the service worker will handle the actual file transfer.
-          bodyToStore = Object.fromEntries(update.body.entries());
-      }
-
-      // ✅ Update badge immediately after queuing
-      if (typeof root.updatePendingBadge === 'function') {
-          root.updatePendingBadge();
-      }
-
       update.attempts += 1;
       update.lastTried = Date.now();
-      // Add to IndexedDB and capture the generated id
-      // ✅ Only add if it's not already stored
-      // if (!update.id) {
-      //   const id = await db.addUpdate(update);
-      //   update.id = id; 
-      // } else {
-      //   // optional: update the record instead of duplicating
-      //   await db.deleteUpdate(update.id);
-      //   update.id = await db.addUpdate(update);
-      // }
+    const newUpdate = await queueOrUpdate(update, db);
 
-      const newUpdate = { ...update, body: bodyToStore };
-
-      // Your existing logic for queuing the update
-      if (!newUpdate.id) {
-          newUpdate.id = await db.addUpdate(newUpdate);
-          console.log('[Badge] Queued update, id:', newUpdate.id);
-          if (typeof root.updatePendingBadge === 'function') {
-              root.updatePendingBadge();
-          }
-      }
+    console.log('[Badge] Queued update, id:', newUpdate.id);
+    if (typeof root.updatePendingBadge === 'function') {
+      root.updatePendingBadge();
+    }
 
       onQueued && onQueued(newUpdate);
 
@@ -89,41 +214,41 @@
         update.attempts += 1;
         update.lastTried = Date.now(); // attempt timestamp
 
-        // CRITICAL FIX 2: Correctly configure the fetch request for JSON or FormData
-        let fetchOptions;
-        if (update.body instanceof FormData) {
-            // If the body is FormData, don't set 'Content-Type'.
-            // The browser will handle it correctly with the boundary.
-            fetchOptions = {
-                method: update.method || 'POST',
-                body: update.body
-            };
-        } else {
-            // For all other cases (e.g., direct validation), send JSON.
-            fetchOptions = {
-                method: update.method || 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(update.body)
-            };
+        if (update.id && typeof db.putUpdate === 'function') {
+          await db.putUpdate(update);
         }
 
-        const response = await fetch(update.url, fetchOptions);
+        const response = await fetch(update.url, buildFetchOptions(update));
+        const data = await parseResponsePayload(response);
 
-        // NEW: HANDLE 409 DELETED RECORD RESPONSE
         if (response.status === 409 && update.id != null) {
           await db.deleteUpdate(update.id);
           console.warn('Update removed from queue: record deleted on server', update);
-          return false;
+          return true;
         }
 
-        if (!response.ok) throw new Error(`Server responded ${response.status}`);
+        if (!response.ok) {
+          throw buildResponseError(response, data);
+        }
 
-        const data = await response.json();
+        if (update.id != null) {
+          await db.deleteUpdate(update.id);
+        }
         onSuccess && onSuccess(data, update);
         return true;
       } catch (err) {
-        await doQueue();
-        onFailure && onFailure(err, update);
+        let queuedUpdate;
+
+        if (err?.shouldDelete && update.id != null) {
+          await db.deleteUpdate(update.id);
+          queuedUpdate = null;
+        } else if (err?.isPermanent && update.id != null) {
+          queuedUpdate = await markQueuedFailure(update, db, err);
+        } else {
+          queuedUpdate = await doQueue();
+        }
+
+        onFailure && onFailure(err, queuedUpdate || update);
         return false;
       }
     } else {
@@ -134,9 +259,16 @@
 
 
   async function syncAllQueuedUpdates({ offlineDB=defaultDB, 
-                                      onSuccess, onQueued, onFailure, shouldStop }={}) {
+                                      onSuccess, onQueued, onFailure, shouldStop, gameId, teamId }={}) {
     let successCount = 0;
-    const updates = await offlineDB.getAllUpdates({ ordered: true });
+    let updates = await offlineDB.getAllUpdates({ ordered: true });
+    if (gameId != null || teamId != null) {
+      updates = updates.filter((update) => {
+        const matchesGame = gameId == null || String(update.body?.game_id ?? update.game_id) === String(gameId);
+        const matchesTeam = teamId == null || String(update.body?.team_id ?? update.team_id) === String(teamId);
+        return matchesGame && matchesTeam;
+      });
+    }
     if (updates.length === 0) return successCount;
 
     for (const update of updates) {
@@ -177,7 +309,7 @@
           }
         });
 
-        // 2.  Merge any pending offline updates (optimistic)
+        // 2.  Merge any still-pending offline updates (optimistic)
         const queued = await rootObj.offlineDB.getAllUpdates();
         if (queued && queued.length > 0) {
           console.log('[offlineSync] Merging offline queued updates:', queued);
@@ -203,33 +335,8 @@
 
         // 3. Persist
         if (typeof rootObj.saveState === 'function') rootObj.saveState();
-        
-        // 4. Remove queued updates now that they’re merged
-        for (const u of queued) {
-          if (u.id != null) {
-            await rootObj.offlineDB.deleteUpdate(u.id);
-            console.log(`[Badge] Deleted update id=${u.id}`);
-          }
-        }
-        // console.log('[Badge] Deleting queued updates:', queued.map(u => u.id));
-        // await Promise.all(
-        //   queued.map(async (u) => {
-        //     if (u.id != null) {
-        //       await rootObj.offlineDB.deleteUpdate(u.id);
-        //       console.log(`[Badge] Deleted update id=${u.id}`);
-        //     }
-        //   })
-        // );
 
-        // 5. Update badge
-        // if (typeof rootObj.updatePendingBadge === 'function') {
-        //   console.log('[Badge] Calling updatePendingBadge after deletions...');
-        //   await rootObj.updatePendingBadge();
-        //   const remaining = await rootObj.offlineDB.getAllUpdates();
-        //   console.log('[Badge] Updates remaining in DB after badge refresh:', remaining.length);
-        // }
-
-        // 5. Update badge (only if running in page, not SW)
+        // 4. Update badge (only if running in page, not SW)
         if (typeof window !== 'undefined' && typeof window.updatePendingBadge === 'function') {
           console.log('[Badge] Calling updatePendingBadge from page context');
           window.updatePendingBadge();
@@ -248,11 +355,20 @@
   }
 
   // NEW: FULL SYNC FUNCTION
-  async function syncWithServer({ gameId, teamId, offlineDB=defaultDB } = {}) {
+  async function syncWithServer({ gameId, teamId, offlineDB=defaultDB, allowCellular=false, manual=false } = {}) {
     console.log('[offlineSync] Starting full sync with server...');
 
+    const networkState = getNetworkState({ allowCellular });
+    if (!networkState.online) {
+      return { synced: false, reason: 'offline', networkState };
+    }
+
+    if (!manual && networkState.waitingForWifi) {
+      return { synced: false, reason: 'waiting-for-wifi', networkState };
+    }
+
     // 1. SEND QUEUED OFFLINE UPDATES FIRST
-    const sentCount = await syncAllQueuedUpdates({ offlineDB,teamId });
+    const sentCount = await syncAllQueuedUpdates({ offlineDB, gameId, teamId });
     if(sentCount>0){
       console.log(`[offlineSync] Sent ${sentCount} queued updates`);
     }
@@ -280,7 +396,7 @@
     //updatePendingBadge();
     console.log('[offlineSync] Full sync complete');
     //console.log('[offlineSync] Full sync complete, reconciled state:', data);
-    return true;
+    return { synced: true, sentCount, networkState };
   }
 
 
@@ -289,6 +405,8 @@
     computeBackoff,
     sendOrQueue,
     syncAllQueuedUpdates,
+    getNetworkState,
+    getPendingUpdatesSummary,
     fetchServerGameState, // NEW
     syncWithServer       // NEW
   };

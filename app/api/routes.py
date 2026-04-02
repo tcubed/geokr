@@ -21,6 +21,120 @@ from app.api import api_bp
 
 from app.main import utils
 
+
+def _iso_or_none(value):
+    return value.isoformat() if value else None
+
+
+def _get_offline_zoom_levels(game):
+    default_zooms = [14, 15, 16]
+    if not game.data or not isinstance(game.data, dict):
+        return default_zooms
+
+    raw_zooms = game.data.get('offline_zooms')
+    if not isinstance(raw_zooms, list):
+        return default_zooms
+
+    zoom_levels = []
+    for zoom in raw_zooms:
+        try:
+            zoom_levels.append(int(zoom))
+        except (TypeError, ValueError):
+            continue
+
+    return zoom_levels or default_zooms
+
+
+def _build_offline_bundle(game, team):
+    assignments = (
+        TeamLocationAssignment.query
+        .filter_by(game_id=game.id, team_id=team.id)
+        .order_by(TeamLocationAssignment.order_index)
+        .all()
+    )
+
+    branding = {}
+    if game.data and isinstance(game.data, dict):
+        branding = game.data.get('branding', {}) or {}
+
+    locations = []
+    for assignment in assignments:
+        loc = assignment.location
+        image_url = (
+            url_for('static', filename=f'images/{loc.image_url}')
+            if loc.image_url else None
+        )
+        locations.append({
+            'id': loc.id,
+            'order_index': assignment.order_index,
+            'name': loc.name,
+            'lat': float(loc.latitude) if loc.latitude is not None else None,
+            'lon': float(loc.longitude) if loc.longitude is not None else None,
+            'clue_text': loc.clue_text,
+            'image_url': image_url,
+            'show_pin': loc.show_pin,
+            'found': assignment.found,
+            'timestamp_found': _iso_or_none(assignment.timestamp_found),
+        })
+
+    characters = []
+    for char in Character.query.filter_by(game_id=game.id).all():
+        characters.append({
+            'id': char.id,
+            'name': char.name,
+            'bio': char.bio,
+            'dialogue': char.dialogue,
+            'location_id': char.location_id,
+        })
+
+    zoom_levels = _get_offline_zoom_levels(game)
+    tile_urls = []
+    if all(v is not None for v in [game.min_lat, game.max_lat, game.min_lon, game.max_lon]):
+        tile_urls = utils.generate_tile_urls(
+            game.min_lat,
+            game.min_lon,
+            game.max_lat,
+            game.max_lon,
+            zoom_levels,
+            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        )
+
+    found_count = sum(1 for location in locations if location['found'])
+
+    return {
+        'bundle_version': 1,
+        'generated_at': datetime.datetime.utcnow().isoformat() + 'Z',
+        'game': {
+            'id': game.id,
+            'name': game.name,
+            'description': game.description,
+            'gametype': game.gametype.name if game.gametype else None,
+            'bounds': {
+                'min_lat': game.min_lat,
+                'max_lat': game.max_lat,
+                'min_lon': game.min_lon,
+                'max_lon': game.max_lon,
+            },
+            'branding': branding,
+        },
+        'team': {
+            'id': team.id,
+            'name': team.name,
+            'start_time': _iso_or_none(team.start_time),
+            'end_time': _iso_or_none(team.end_time),
+            'progress': {
+                'found': found_count,
+                'total': len(locations),
+            },
+        },
+        'locations': locations,
+        'characters': characters,
+        'tiles': {
+            'zooms': zoom_levels,
+            'urls': tile_urls,
+        },
+    }
+
 def to_float_or_none(v):
     if v is None or v == "" or v == "null":
         return None
@@ -146,6 +260,27 @@ def get_team_location_assignments(game_id):
     return jsonify(result)
 
 
+@api_bp.route('/api/game/<int:game_id>/offline_bundle', methods=['GET'])
+@login_required
+def offline_bundle(game_id):
+    membership = (
+        TeamMembership.query
+        .join(Team)
+        .filter(
+            TeamMembership.user_id == current_user.id,
+            Team.game_id == game_id,
+        )
+        .first()
+    )
+
+    if not membership:
+        return jsonify({'error': 'User is not part of a team in this game'}), 403
+
+    game = Game.query.get_or_404(game_id)
+    bundle = _build_offline_bundle(game, membership.team)
+    return jsonify(bundle)
+
+
 # Adjustable distance threshold in meters
 PROXIMITY_THRESHOLD_METERS = 30
 
@@ -252,6 +387,7 @@ def build_progress_response(assignment):
     next_loc = next((a.location for a in all_assignments if not a.found), None)
 
     return {
+        "success": True,
         "status": "found" if assignment.found else "pending",
         "location_id": assignment.location_id,
         "team_progress": {
@@ -276,6 +412,7 @@ def mark_location_found(location_id):
     user_lat = data.get("lat")
     user_lon = data.get("lon")
     force = data.get("force", False)
+    method = (data.get("method") or "direct").lower()
 
     # Validate input
     if not game_id:
@@ -306,31 +443,43 @@ def mark_location_found(location_id):
     # Admin override (force) check
     if force and current_user.has_role("admin"):  # Assuming you have a role system
         assignment.found = True
-        assignment.timestamp_found = datetime.utcnow()
+        assignment.timestamp_found = datetime.datetime.utcnow()
         db.session.commit()
-        return jsonify(build_progress_response(assignment)), 200
+        response = build_progress_response(assignment)
+        response["method"] = method
+        response["client_event_id"] = data.get("client_event_id")
+        return jsonify(response), 200
 
-    # Normal mode: check proximity
-    if not (user_lat and user_lon):
-        return jsonify({"error": "Missing lat/lon for proximity check"}), 400
+    distance = None
 
-    # Calculate distance
-    target_lat = assignment.location.latitude
-    target_lon = assignment.location.longitude
-    distance = utils.haversine(user_lat, user_lon, target_lat, target_lon)
+    # Normal mode: only geolocation-based validations require a proximity check.
+    if method == "geo":
+        if user_lat is None or user_lon is None:
+            return jsonify({"success": False, "error": "Missing lat/lon for proximity check"}), 400
 
-    if distance > PROXIMITY_THRESHOLD_METERS:
-        return jsonify({
-            "message": "Too far from location",
-            "distance_m": round(distance, 2)
-        }), 403
+        target_lat = assignment.location.latitude
+        target_lon = assignment.location.longitude
+        distance = utils.haversine(user_lat, user_lon, target_lat, target_lon)
+
+        if distance > PROXIMITY_THRESHOLD_METERS:
+            return jsonify({
+                "success": False,
+                "message": "Too far from location",
+                "distance_m": round(distance, 2)
+            }), 403
 
     # Mark as found
     assignment.found = True
-    assignment.timestamp_found = datetime.utcnow()
+    assignment.timestamp_found = datetime.datetime.utcnow()
     db.session.commit()
 
-    return jsonify(build_progress_response(assignment)), 200
+    response = build_progress_response(assignment)
+    response["method"] = method
+    response["client_event_id"] = data.get("client_event_id")
+    if distance is not None:
+        response["distance_m"] = round(distance, 2)
+
+    return jsonify(response), 200
 
 
 

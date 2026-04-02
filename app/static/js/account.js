@@ -11,6 +11,316 @@ const games = window.GAMES || [];
 const gameSelect = document.getElementById('game_id');
 const teamSelect = document.getElementById('team_id');
 const activeTeamSelect = document.getElementById('active_team_select');
+const prefetchPanel = document.getElementById('offline-prefetch-panel');
+const downloadOfflineBundleBtn = document.getElementById('downloadOfflineBundleBtn');
+const removeOfflineBundleBtn = document.getElementById('removeOfflineBundleBtn');
+const offlinePrefetchStatus = document.getElementById('offline-prefetch-status');
+const offlinePrefetchSummary = document.getElementById('offline-prefetch-summary');
+const offlinePrefetchProgress = document.getElementById('offline-prefetch-progress');
+
+const TILE_CACHE = 'tile-cache-v1';
+const IMAGE_CACHE = 'image-cache-v1';
+const API_CACHE = 'api-cache-v1';
+
+function setPrefetchStatus(message, { tone = 'muted' } = {}) {
+    if (!offlinePrefetchStatus) return;
+    offlinePrefetchStatus.className = `small text-${tone} mb-3`;
+    offlinePrefetchStatus.textContent = message;
+}
+
+function setPrefetchProgress(completed, total) {
+    if (!offlinePrefetchProgress) return;
+    const safeTotal = Math.max(total || 0, 1);
+    const percent = total ? Math.min(100, Math.round((completed / safeTotal) * 100)) : 0;
+    offlinePrefetchProgress.style.width = `${percent}%`;
+    offlinePrefetchProgress.textContent = `${percent}%`;
+    offlinePrefetchProgress.setAttribute('aria-valuenow', String(percent));
+}
+
+function setPrefetchBusy(isBusy) {
+    if (downloadOfflineBundleBtn) downloadOfflineBundleBtn.disabled = isBusy;
+    if (removeOfflineBundleBtn) removeOfflineBundleBtn.disabled = isBusy;
+}
+
+function getActivePrefetchGameId() {
+    const rawValue = prefetchPanel?.dataset.gameId || gameState.gameId || null;
+    if (rawValue == null || rawValue === '') return null;
+
+    const parsed = Number.parseInt(rawValue, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+}
+
+function normalizeAssetUrl(url) {
+    if (!url) return null;
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith('/')) return url;
+    return `/static/${url.replace(/^\/+/, '')}`;
+}
+
+function toAbsoluteUrl(url) {
+    const normalized = normalizeAssetUrl(url);
+    return normalized ? new URL(normalized, window.location.origin) : null;
+}
+
+function toCacheKey(url) {
+    const absoluteUrl = toAbsoluteUrl(url);
+    return absoluteUrl ? absoluteUrl.pathname : null;
+}
+
+function dedupeUrls(urls) {
+    const seen = new Set();
+    return urls.filter((url) => {
+        const absoluteUrl = toAbsoluteUrl(url);
+        if (!absoluteUrl) return false;
+        const key = absoluteUrl.toString();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function getBundleImageUrls(bundle) {
+    if (!bundle) return [];
+
+    const brandingIcon = bundle.game?.branding?.icon_url;
+    const locationImages = Array.isArray(bundle.locations)
+        ? bundle.locations.map((location) => location.image_url)
+        : [];
+
+    return dedupeUrls([brandingIcon, ...locationImages].filter(Boolean));
+}
+
+function getBundleTileUrls(bundle) {
+    return dedupeUrls(bundle?.tiles?.urls || []);
+}
+
+function updatePrefetchSummary(bundle) {
+    if (!offlinePrefetchSummary) return;
+    if (!bundle) {
+        offlinePrefetchSummary.textContent = 'Not downloaded yet.';
+        return;
+    }
+
+    const imageCount = getBundleImageUrls(bundle).length;
+    const tileCount = getBundleTileUrls(bundle).length;
+    const generatedAt = bundle.generated_at
+        ? new Date(bundle.generated_at).toLocaleString()
+        : 'unknown time';
+
+    offlinePrefetchSummary.textContent = `Saved ${bundle.game?.name || 'game'} for ${bundle.team?.name || 'team'} · ${imageCount} images · ${tileCount} tiles · updated ${generatedAt}.`;
+}
+
+async function cacheJsonPayload(url, payload) {
+    const cache = await caches.open(API_CACHE);
+    const cacheKey = toCacheKey(url);
+    if (!cacheKey) throw new Error('Could not build cache key for offline bundle');
+    const response = new Response(JSON.stringify(payload), {
+        headers: { 'Content-Type': 'application/json' }
+    });
+    await cache.put(cacheKey, response);
+}
+
+async function cacheAssetUrl(cacheName, url) {
+    const absoluteUrl = toAbsoluteUrl(url);
+    const cacheKey = toCacheKey(url);
+    if (!absoluteUrl || !cacheKey) {
+        throw new Error(`Invalid cache URL: ${url}`);
+    }
+
+    const isCrossOrigin = absoluteUrl.origin !== window.location.origin;
+    const response = await fetch(absoluteUrl.toString(), {
+        credentials: isCrossOrigin ? 'omit' : 'same-origin',
+    });
+
+    if (!response.ok && response.type !== 'opaque') {
+        throw new Error(`Failed to cache ${absoluteUrl.pathname} (${response.status})`);
+    }
+
+    const cache = await caches.open(cacheName);
+    await cache.put(cacheKey, response.clone());
+}
+
+async function deleteCachedUrl(cacheName, url) {
+    const cacheKey = toCacheKey(url);
+    if (!cacheKey) return;
+    const cache = await caches.open(cacheName);
+    await cache.delete(cacheKey);
+}
+
+async function fetchOfflineBundle(gameId) {
+    const response = await fetch(`/api/game/${gameId}/offline_bundle`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    });
+
+    if (!response.ok) {
+        let message = `Failed to fetch offline bundle (${response.status})`;
+        try {
+            const payload = await response.json();
+            message = payload?.error || payload?.message || message;
+        } catch {
+            // keep fallback message
+        }
+        throw new Error(message);
+    }
+
+    return response.json();
+}
+
+async function saveOfflineBundle(bundle) {
+    if (!window.offlineDB?.saveOfflineBundle) {
+        throw new Error('Offline storage is not available in this browser');
+    }
+    await window.offlineDB.saveOfflineBundle(bundle);
+}
+
+async function loadOfflineBundleRecord(gameId) {
+    if (!window.offlineDB?.getOfflineBundleRecord || !gameId) return null;
+    return window.offlineDB.getOfflineBundleRecord(gameId);
+}
+
+async function removeOfflineBundleRecord(gameId) {
+    if (!window.offlineDB?.deleteOfflineBundle || !gameId) return;
+    await window.offlineDB.deleteOfflineBundle(gameId);
+}
+
+function shouldConfirmCellularDownload() {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!connection) return false;
+
+    const type = String(connection.type || '').toLowerCase();
+    const effectiveType = String(connection.effectiveType || '').toLowerCase();
+    return connection.saveData || type === 'cellular' || /(^|[^a-z])([2345]g)([^a-z]|$)/.test(effectiveType);
+}
+
+async function refreshOfflinePrefetchState() {
+    const gameId = getActivePrefetchGameId();
+    if (!gameId) return;
+
+    const bundle = await loadOfflineBundleRecord(gameId);
+    updatePrefetchSummary(bundle?.payload || null);
+
+    if (removeOfflineBundleBtn) {
+        removeOfflineBundleBtn.disabled = !bundle;
+    }
+
+    if (bundle) {
+        setPrefetchProgress(1, 1);
+        setPrefetchStatus('Offline bundle is stored on this device.', { tone: 'success' });
+    } else {
+        setPrefetchProgress(0, 1);
+        setPrefetchStatus('Ready to download offline assets.', { tone: 'muted' });
+    }
+}
+
+async function downloadOfflinePackage() {
+    const gameId = getActivePrefetchGameId();
+    if (!gameId) {
+        throw new Error('No active game is available for offline download');
+    }
+    if (!('caches' in window)) {
+        throw new Error('Cache storage is not available in this browser');
+    }
+    if (!navigator.onLine) {
+        throw new Error('Reconnect to the internet before downloading offline assets');
+    }
+    if (shouldConfirmCellularDownload()) {
+        const confirmed = window.confirm('You appear to be on a cellular or data-saving connection. Offline download may use a lot of data. Continue?');
+        if (!confirmed) return;
+    }
+
+    setPrefetchBusy(true);
+    setPrefetchStatus('Fetching offline bundle…');
+    setPrefetchProgress(0, 1);
+
+    let bundle = null;
+    let completed = 0;
+    let total = 1;
+    let completedSuccessfully = false;
+
+    try {
+        bundle = await fetchOfflineBundle(gameId);
+        const bundleUrl = `/api/game/${gameId}/offline_bundle`;
+        const imageUrls = getBundleImageUrls(bundle);
+        const tileUrls = getBundleTileUrls(bundle);
+        const workItems = [
+            { cacheName: API_CACHE, url: bundleUrl, kind: 'bundle' },
+            ...imageUrls.map((url) => ({ cacheName: IMAGE_CACHE, url, kind: 'image' })),
+            ...tileUrls.map((url) => ({ cacheName: TILE_CACHE, url, kind: 'tile' })),
+        ];
+
+        total = workItems.length;
+        setPrefetchProgress(completed, total);
+
+        await saveOfflineBundle(bundle);
+        await cacheJsonPayload(bundleUrl, bundle);
+        completed += 1;
+        setPrefetchProgress(completed, total);
+        setPrefetchStatus(`Saved offline bundle metadata (${completed}/${total}).`);
+
+        for (const item of workItems.slice(1)) {
+            await cacheAssetUrl(item.cacheName, item.url);
+            completed += 1;
+            setPrefetchProgress(completed, total);
+            setPrefetchStatus(`Cached ${item.kind} ${completed}/${total}.`);
+        }
+
+        updatePrefetchSummary(bundle);
+        setPrefetchStatus('Offline bundle, images, and map tiles are ready on this device.', { tone: 'success' });
+        showToast('Offline bundle downloaded successfully.', { type: 'success' });
+        completedSuccessfully = true;
+        await refreshOfflinePrefetchState();
+    } catch (err) {
+        if (bundle) {
+            updatePrefetchSummary(bundle);
+        }
+        setPrefetchProgress(completed, total);
+        setPrefetchStatus(`Offline download stopped after ${completed}/${total} items. ${err.message}`, { tone: 'danger' });
+        throw err;
+    } finally {
+        setPrefetchBusy(false);
+        if (!completedSuccessfully && removeOfflineBundleBtn) {
+            const existingBundle = await loadOfflineBundleRecord(gameId);
+            removeOfflineBundleBtn.disabled = !existingBundle;
+        }
+    }
+}
+
+async function removeOfflinePackage() {
+    const gameId = getActivePrefetchGameId();
+    if (!gameId) {
+        throw new Error('No active game is selected');
+    }
+
+    setPrefetchBusy(true);
+    setPrefetchStatus('Removing offline bundle…');
+
+    try {
+        const bundleRecord = await loadOfflineBundleRecord(gameId);
+        const bundle = bundleRecord?.payload || null;
+        const bundleUrl = `/api/game/${gameId}/offline_bundle`;
+
+        await removeOfflineBundleRecord(gameId);
+        await deleteCachedUrl(API_CACHE, bundleUrl);
+
+        if (bundle) {
+            for (const url of getBundleImageUrls(bundle)) {
+                await deleteCachedUrl(IMAGE_CACHE, url);
+            }
+            for (const url of getBundleTileUrls(bundle)) {
+                await deleteCachedUrl(TILE_CACHE, url);
+            }
+        }
+
+        setPrefetchProgress(0, 1);
+        updatePrefetchSummary(null);
+        setPrefetchStatus('Offline bundle removed from this device.', { tone: 'muted' });
+        showToast('Offline bundle removed.', { type: 'info' });
+        await refreshOfflinePrefetchState();
+    } finally {
+        setPrefetchBusy(false);
+    }
+}
 
 // --- Main function to switch team and synchronize state ---
 export async function switchTeam(newTeamId) {
@@ -250,4 +560,37 @@ if (optionsForm) {
 const initialGameId = gameState.gameId || (games[0] && games[0].id);
 if (initialGameId) {
     updateJoinGameSelects();
+}
+
+if (downloadOfflineBundleBtn) {
+    downloadOfflineBundleBtn.addEventListener('click', async () => {
+        try {
+            await downloadOfflinePackage();
+        } catch (err) {
+            console.error('[offline-prefetch] Download failed:', err);
+            setPrefetchStatus(err.message || 'Offline download failed.', { tone: 'danger' });
+            showToast(err.message || 'Offline download failed.', { type: 'error' });
+            setPrefetchBusy(false);
+        }
+    });
+}
+
+if (removeOfflineBundleBtn) {
+    removeOfflineBundleBtn.addEventListener('click', async () => {
+        try {
+            await removeOfflinePackage();
+        } catch (err) {
+            console.error('[offline-prefetch] Remove failed:', err);
+            setPrefetchStatus(err.message || 'Could not remove offline bundle.', { tone: 'danger' });
+            showToast(err.message || 'Could not remove offline bundle.', { type: 'error' });
+            setPrefetchBusy(false);
+        }
+    });
+}
+
+if (prefetchPanel?.dataset.gameId) {
+    refreshOfflinePrefetchState().catch((err) => {
+        console.error('[offline-prefetch] State refresh failed:', err);
+        setPrefetchStatus('Could not load offline bundle status.', { tone: 'danger' });
+    });
 }

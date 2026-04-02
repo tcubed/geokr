@@ -176,6 +176,59 @@
 
         <button type="submit" class="btn btn-primary mt-3">Save</button>
       </form>
+
+      {% set prefetch = namespace(active_membership=None) %}
+      {% for membership in current_user.team_memberships %}
+        {% if session.active_team_id|int == membership.team.id %}
+          {% set prefetch.active_membership = membership %}
+        {% endif %}
+      {% endfor %}
+
+      <div class="card mt-4" id="offline-prefetch-panel"
+           {% if prefetch.active_membership %}
+           data-game-id="{{ prefetch.active_membership.team.game.id }}"
+           data-team-id="{{ prefetch.active_membership.team.id }}"
+           data-game-name="{{ prefetch.active_membership.team.game.name }}"
+           data-team-name="{{ prefetch.active_membership.team.name }}"
+           {% endif %}>
+        <div class="card-body">
+          <h6 class="card-title mb-2">Offline download</h6>
+
+          {% if prefetch.active_membership %}
+          <p class="text-muted mb-3">
+            Save the active game for spotty coverage. This downloads the latest bundle,
+            clue images, and map tiles for
+            <strong>{{ prefetch.active_membership.team.game.name }}</strong>
+            / {{ prefetch.active_membership.team.name }}.
+          </p>
+
+          <div class="small text-muted mb-3" id="offline-prefetch-summary">
+            Not downloaded yet.
+          </div>
+
+          <div class="progress mb-2" role="progressbar" aria-label="Offline download progress" aria-valuemin="0" aria-valuemax="100">
+            <div id="offline-prefetch-progress" class="progress-bar" style="width: 0%;">0%</div>
+          </div>
+
+          <div id="offline-prefetch-status" class="small text-muted mb-3">
+            Ready to download offline assets.
+          </div>
+
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" id="downloadOfflineBundleBtn" class="btn btn-primary">
+              Download offline bundle
+            </button>
+            <button type="button" id="removeOfflineBundleBtn" class="btn btn-outline-secondary">
+              Remove offline bundle
+            </button>
+          </div>
+          {% else %}
+          <p class="text-muted mb-0">
+            Join or switch to a team before downloading an offline bundle.
+          </p>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
 </div>

@@ -51,6 +51,29 @@
   .popup-found-btn.found-ok {
     background: #198754;
   }
+  .popup-found-btn.pending {
+    background: #f59e0b;
+    color: #212529;
+  }
+  #sync-status-panel {
+    position: fixed;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 1000;
+    background: rgba(255,255,255,0.94);
+    border-radius: 10px;
+    padding: 0.5rem 0.75rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    min-width: 220px;
+  }
+  #pending-badge {
+    background: #f59e0b;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: none;
+  }
 </style>
 {% endblock %}
 
@@ -66,13 +89,26 @@
     <span id="hud-count">{{ found_count }} / {{ total_count }} found</span>
   {% endif %}
 </div>
+
+<div id="sync-status-panel">
+  <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
+  <div id="sync-state-text" class="small text-muted mt-2">Checking sync status…</div>
+  <div class="d-flex align-items-center gap-2 mt-2">
+    <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
+    <div class="form-check m-0">
+      <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
+      <label class="form-check-label small" for="allow-cellular-sync">Allow cellular</label>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='libs/leaflet/leaflet.js') }}"></script>
 <script type="module">
-const GAME_DATA = {
+window.MAP_PLAY_DATA = {
   gameId: {{ game.id | tojson }},
+  teamId: {{ team.id | tojson }},
   locations: {{ locations | tojson }},
   bounds: {
     minLat: {{ game.min_lat | tojson }},
@@ -81,141 +117,7 @@ const GAME_DATA = {
     maxLng: {{ game.max_lon | tojson }},
   }
 };
-
-/* ---- map init ---- */
-const map = L.map('map');
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap contributors',
-  maxZoom: 19,
-}).addTo(map);
-
-/* Fit to game bounds if available, else world view */
-const { minLat, maxLat, minLng, maxLng } = GAME_DATA.bounds;
-if (minLat != null && maxLat != null && minLng != null && maxLng != null) {
-  map.fitBounds([[minLat, minLng], [maxLat, maxLng]]);
-} else {
-  map.setView([0, 0], 2);
-}
-
-/* ---- marker helpers ---- */
-function makeIcon(found) {
-  return L.circleMarker ? null : null;  // we use circleMarker below
-}
-
-const markerRefs = {};  // location_id -> { marker, foundState }
-
-GAME_DATA.locations.forEach(loc => {
-  // show_pin: null = default show; true = show; false = hide
-  if (loc.show_pin === false) return;
-  if (loc.lat == null || loc.lon == null) return;
-
-  const circle = L.circleMarker([loc.lat, loc.lon], {
-    radius: 10,
-    fillColor: loc.found ? '#198754' : '#0d6efd',
-    color: '#fff',
-    weight: 2,
-    fillOpacity: 0.85,
-  }).addTo(map);
-
-  const popupHtml = buildPopupHtml(loc);
-  circle.bindPopup(popupHtml);
-
-  circle.on('popupopen', () => wirePopupButton(loc.id));
-
-  markerRefs[loc.id] = { circle, found: loc.found };
-});
-
-function buildPopupHtml(loc) {
-  const foundAttr = loc.found ? 'disabled class="popup-found-btn found-ok"' : 'class="popup-found-btn"';
-  const btnLabel = loc.found ? '✓ Found' : "I'm Here";
-  const clue = loc.clue_text ? `<p style="font-size:0.82rem;margin:0.25rem 0 0.5rem">${escHtml(loc.clue_text)}</p>` : '';
-  return `
-    <strong>${escHtml(loc.name)}</strong>
-    ${clue}
-    <button ${foundAttr} data-loc-id="${loc.id}">${btnLabel}</button>
-  `;
-}
-
-function escHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function wirePopupButton(locId) {
-  const btn = document.querySelector(`.popup-found-btn[data-loc-id="${locId}"]`);
-  if (!btn || btn.disabled) return;
-  btn.addEventListener('click', () => markFound(locId, btn), { once: true });
-}
-
-/* ---- geolocation ---- */
-let userMarker = null;
-let userLat = null, userLon = null;
-
-function onPosition(pos) {
-  userLat = pos.coords.latitude;
-  userLon = pos.coords.longitude;
-  if (!userMarker) {
-    userMarker = L.circleMarker([userLat, userLon], {
-      radius: 8, fillColor: '#ffc107', color: '#fff', weight: 2, fillOpacity: 1,
-    }).addTo(map).bindTooltip('You', { permanent: false });
-  } else {
-    userMarker.setLatLng([userLat, userLon]);
-  }
-}
-if (navigator.geolocation) {
-  navigator.geolocation.watchPosition(onPosition, null, { enableHighAccuracy: true });
-}
-
-/* ---- found submission ---- */
-async function markFound(locId, btn) {
-  btn.disabled = true;
-  btn.textContent = '…';
-
-  const body = {
-    game_id: GAME_DATA.gameId,
-    lat: userLat,
-    lon: userLon,
-  };
-
-  try {
-    const resp = await fetch(`/api/location/${locId}/found`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json();
-
-    if (resp.ok) {
-      btn.textContent = '✓ Found';
-      btn.classList.add('found-ok');
-
-      // update marker colour
-      const ref = markerRefs[locId];
-      if (ref) {
-        ref.circle.setStyle({ fillColor: '#198754' });
-        ref.found = true;
-      }
-
-      // update HUD
-      const foundNow = Object.values(markerRefs).filter(r => r.found).length;
-      const hudCount = document.getElementById('hud-count');
-      if (hudCount) hudCount.textContent = `${foundNow} / ${GAME_DATA.locations.length} found`;
-
-      if (data.team_complete) {
-        const hud = document.getElementById('hud');
-        hud.classList.add('complete');
-        hud.textContent = 'All locations found! 🎉';
-      }
-    } else {
-      btn.disabled = false;
-      btn.textContent = 'Try again';
-      console.warn('markFound error:', data);
-    }
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = 'Error – retry';
-    console.error(err);
-  }
-}
+window.GAME_DATA = window.MAP_PLAY_DATA;
 </script>
+<script type="module" src="{{ url_for('static', filename='js/map-play.js') }}?v={{ version }}"></script>
 {% endblock %}

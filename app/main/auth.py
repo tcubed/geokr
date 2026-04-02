@@ -211,7 +211,14 @@ def magic_login():
 
     login_user(user, remember=True)
     flash(f"Welcome back, {user.display_name}!", "success")
-    return redirect(url_for("main.findloc"))
+
+    resume_token = generate_resume_token(user.email)
+    return render_template(
+        "user/magic_success.html",
+        resume_token=resume_token,
+        display_name=user.display_name,
+        redirect_url=url_for("main.index"),
+    )
 
 
 @auth_bp.route('/logout')
