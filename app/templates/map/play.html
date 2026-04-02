@@ -73,26 +73,30 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   }
   .sync-toolbar-inner {
-    padding: 0.3rem 0.75rem;
+    padding: 0.28rem 0.75rem;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
-    flex-wrap: wrap;
-  }
-  .sync-toolbar-message {
-    min-width: 120px;
-    font-size: 0.76rem;
-    line-height: 1.1;
-    flex: 1 1 180px;
+    flex-wrap: nowrap;
   }
   .sync-toolbar-controls {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 10px;
-    flex: 999 1 auto;
-    flex-wrap: wrap;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+  .sync-toolbar-message {
+    min-width: 0;
+    font-size: 0.74rem;
+    line-height: 1.1;
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sync-toolbar-controls .pending-inline {
+    flex: 0 0 auto;
   }
   #pending-badge {
     background: #f59e0b;
@@ -129,17 +133,17 @@
       padding-right: 0.5rem;
       gap: 8px;
     }
-    .sync-toolbar-message {
-      flex-basis: 100%;
-      min-width: 0;
-    }
     .sync-toolbar-controls {
-      width: 100%;
-      justify-content: space-between;
       gap: 8px;
     }
     .sync-toolbar-controls .form-check-label {
-      font-size: 0.76rem;
+      font-size: 0.7rem;
+    }
+    .sync-toolbar-message.small {
+      font-size: 0.68rem !important;
+    }
+    .sync-toolbar-controls .btn {
+      font-size: 0.7rem;
     }
   }
 </style>
@@ -148,15 +152,15 @@
 {% block subnav %}
 <div id="sync-toolbar" class="sync-toolbar sync-idle">
   <div class="sync-toolbar-inner">
-    <div id="sync-state-text" class="sync-toolbar-message small text-muted">Checking sync status…</div>
     <div class="sync-toolbar-controls">
-      <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
       <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
       <div class="form-check m-0">
         <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
         <label class="form-check-label small" for="allow-cellular-sync">Allow cellular</label>
       </div>
+      <div id="pending-badge" class="pending-inline">⏳ <span id="pending-count">0</span> pending</div>
     </div>
+    <div id="sync-state-text" class="sync-toolbar-message small text-muted">Checking sync status…</div>
   </div>
 </div>
 {% endblock %}
