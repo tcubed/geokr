@@ -234,3 +234,55 @@ def test_replayed_found_sync_is_safe_after_team_completion(app, client, regular_
     assert data['success'] is True
     assert data['team_progress']['found'] == 2
     assert data['team_progress']['total'] == 2
+
+
+def test_admin_can_confirm_found_for_blocked_camera_case(app, client, admin_user_id, regular_user_id):
+    with app.app_context():
+        state = _create_sync_game(regular_user_id)
+
+    login_rv = _login_existing_user(client, 'admin@test.com', 'Admin User')
+    assert login_rv.status_code in (301, 302)
+
+    rv = client.post(
+        f"/api/admin/team/{state['team_id']}/location/{state['location_1_id']}/confirm_found",
+        json={
+            'game_id': state['game_id'],
+            'reason': 'camera_failed',
+            'client_event_id': 'evt-admin-confirm-1',
+        },
+    )
+    assert rv.status_code == 200
+
+    data = rv.get_json()
+    assert data['success'] is True
+    assert data['method'] == 'admin_confirm'
+    assert data['override_reason'] == 'camera_failed'
+    assert data['confirmed_by_user_id'] == admin_user_id
+    assert data['client_event_id'] == 'evt-admin-confirm-1'
+    assert data['team_progress']['found'] == 1
+    assert data['team_progress']['total'] == 2
+
+    with app.app_context():
+        team = Team.query.get(state['team_id'])
+        overrides = team.data.get('admin_overrides', [])
+        assert len(overrides) == 1
+        assert overrides[0]['location_id'] == state['location_1_id']
+        assert overrides[0]['reason'] == 'camera_failed'
+        assert overrides[0]['admin_user_id'] == admin_user_id
+
+
+def test_regular_user_cannot_access_admin_confirm_endpoint(app, client, regular_user_id):
+    with app.app_context():
+        state = _create_sync_game(regular_user_id)
+
+    login_rv = _login_existing_user(client, 'user@test.com', 'Test User')
+    assert login_rv.status_code in (301, 302)
+
+    rv = client.post(
+        f"/api/admin/team/{state['team_id']}/location/{state['location_1_id']}/confirm_found",
+        json={
+            'game_id': state['game_id'],
+            'reason': 'camera_failed',
+        },
+    )
+    assert rv.status_code in (302, 403)

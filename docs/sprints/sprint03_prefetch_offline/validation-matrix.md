@@ -2,7 +2,7 @@
 
 This document is the explicit sign-off matrix for Sprint 03 offline readiness.
 
-Use it with [plan.md](plan.md) and [../../review-0401.md](../../review-0401.md).
+Use it with [plan.md](plan.md) and [../../design/game_flow.md](../../design/game_flow.md).
 
 ---
 

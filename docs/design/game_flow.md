@@ -1,7 +1,20 @@
-# GeoKR Offline Rollout Notes — April 1, 2026
+# GeoKR Offline Game Flow
 
 **Author:** GitHub Copilot  
-**Context:** Sprint 03 Phases 0–6 are now implemented. This note updates the earlier April 1 review into an operator/player guide for the current offline flow and the checks still required before event rollout.
+**Context:** Sprint 03 Phases 0–8 are implemented in code and automated tests. This document describes the current offline/operator flow and the remaining human sign-off expectations before event rollout.
+
+---
+
+## Purpose of This Document
+
+This is not a review note. It is a **flow/design and operations document** for how offline play currently works.
+
+Use it with:
+
+- [../review-0330.md](../review-0330.md) for the original March 30 review
+- [../backlog.md](../backlog.md) for follow-up backlog items
+- [../sprints/sprint03_prefetch_offline/plan.md](../sprints/sprint03_prefetch_offline/plan.md) for sprint implementation detail
+- [../sprints/sprint03_prefetch_offline/validation-matrix.md](../sprints/sprint03_prefetch_offline/validation-matrix.md) for manual/device sign-off
 
 ---
 
@@ -106,9 +119,9 @@ Operators can ask players to verify:
 
 ---
 
-## What a Non-Developer Should Understand
+## Mental Model for Non-Developers
 
-The offline model has two different kinds of local data:
+The offline system has two different kinds of local data:
 
 1. **Offline bundle**
    - read-model cache
@@ -128,8 +141,6 @@ That distinction matters:
 ---
 
 ## Practical Limitations
-
-These should be communicated clearly before relying on offline mode in production.
 
 ### 1. First login still needs connectivity
 
@@ -203,9 +214,7 @@ Have the player complete a fresh login, then revisit the game while online so th
 
 ---
 
-## Recommended Browser Checks Before Event Use
-
-These are the minimum manual checks operators or testers should run on real devices:
+## Minimum Browser Checks Before Event Use
 
 1. **Login and bundle download**
    - log in on a fresh device
@@ -234,13 +243,15 @@ These are the minimum manual checks operators or testers should run on real devi
    - reload the page after an offline find
    - confirm pending state survives reload
 
+For the full sign-off matrix, use [../sprints/sprint03_prefetch_offline/validation-matrix.md](../sprints/sprint03_prefetch_offline/validation-matrix.md).
+
 ---
 
 ## Rollout Recommendation
 
 This flow is now far enough along for guided field testing and controlled pilot use.
 
-It is **not** yet something I would call “fully trusted for event use without rehearsal.”
+It is **not** yet something that should be treated as fully trusted for event use without rehearsal.
 
 Recommended next step:
 
@@ -249,4 +260,4 @@ Recommended next step:
 
 ---
 
-*End of notes.*
+*End of document.*

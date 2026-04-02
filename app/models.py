@@ -153,6 +153,9 @@ class User(db.Model,UserMixin):
     def is_admin(self):
         return any(ur.role.name == 'admin' for ur in self.user_roles)
         #return self.user_roles.join(Role).filter(Role.name == 'admin').count() > 0
+
+    def has_role(self, role_name):
+        return any(ur.role and ur.role.name == role_name for ur in self.user_roles)
     
 class TeamMembership(db.Model):
     id = db.Column(db.Integer, primary_key=True)

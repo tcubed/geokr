@@ -3,6 +3,9 @@ import { gameState, loadState, saveState } from './localStorage.js';
 import { setupValidationButtons } from './validate.js'; // You'll need to call this after rendering
 import { showToast } from './common-ui.js';
 
+const SYNC_BADGE_FLASH_MS = 5000;
+let syncedBadgeTimeoutId = null;
+
 // Get a safe reference to the game state
 export function getGameState() {
   if (!window.gameState) {
@@ -41,6 +44,7 @@ export function applyOfflineUI(locationId) {
         // We set the location to 'found' and a temporary 'isOffline' flag.
         gs.locations[foundIndex].found = true;
         gs.locations[foundIndex].isOffline = true;
+        gs.locations[foundIndex].syncedAt = null;
         
         // Step 2: Advance the current index for the next clue.
         // This makes the next clue card visible.
@@ -65,6 +69,8 @@ export function applyGameUpdate(data) {
     console.log('applyGameUpdate:', data);
     if (!data) return;
 
+  const isOptimistic = Boolean(data.optimistic);
+
     const location_id = data.locationId || data.location_id;
     if (!location_id) {
         console.warn('No locationId in update data:', data);
@@ -82,10 +88,13 @@ export function applyGameUpdate(data) {
     if (foundIndex > -1) {
         // Step 1: Update the local game state with server-confirmed data.
         gs.locations[foundIndex].found = true;
-        
-        // Step 2: Remove the temporary 'isOffline' flag.
-        // This is crucial for clearing the offline styling.
+
+      // Step 2: Remove the temporary 'isOffline' flag only after a real sync.
+      // This is crucial for clearing the offline styling.
+      if (!isOptimistic) {
         gs.locations[foundIndex].isOffline = false;
+        gs.locations[foundIndex].syncedAt = Date.now();
+      }
         
         // Step 3: Advance the current index.
         // This is the true, server-confirmed index.
@@ -128,11 +137,21 @@ export function renderCluesFromState() {
   // Clear existing HTML
   container.innerHTML = '';
 
+  const now = Date.now();
+  let nextSyncedBadgeExpiry = null;
+
   // Iterate over all locations to render the full accordion structure
   gs.locations.forEach((loc, idx) => {
     const isFound = loc.found;
     const isPending = Boolean(loc.isOffline);
     const isCurrent = idx === gs.currentIndex;
+    const syncedAt = Number(loc.syncedAt || 0);
+    const isRecentlySynced = !isPending && isFound && syncedAt > 0 && (now - syncedAt) < SYNC_BADGE_FLASH_MS;
+
+    if (isRecentlySynced) {
+      const expiry = syncedAt + SYNC_BADGE_FLASH_MS;
+      nextSyncedBadgeExpiry = nextSyncedBadgeExpiry == null ? expiry : Math.min(nextSyncedBadgeExpiry, expiry);
+    }
     
     // Corrected logic: a card is visible if it's found or its index
     // is less than or equal to the current index.
@@ -156,8 +175,8 @@ export function renderCluesFromState() {
                   data-bs-target="#collapse-${loc.id}"
                   aria-expanded="${isExpanded ? 'true' : 'false'}">
             ${loc.name}
-            ${isPending ? '<span class="badge rounded-pill bg-warning text-dark ms-2">Pending sync</span>' : ''}
-            ${isFound && !isPending ? '<span class="badge rounded-pill bg-success ms-2">Synced</span>' : ''}
+            ${isPending ? '<span class="badge rounded-pill bg-warning text-dark ms-2">Pending</span>' : ''}
+            ${isRecentlySynced ? '<span class="badge rounded-pill sync-flash-badge ms-2">Just synced</span>' : ''}
           </button>
         </h2>
 
@@ -236,6 +255,19 @@ export function renderCluesFromState() {
 
     container.insertAdjacentHTML('beforeend', cardHtml);
   });
+
+  if (syncedBadgeTimeoutId) {
+    window.clearTimeout(syncedBadgeTimeoutId);
+    syncedBadgeTimeoutId = null;
+  }
+
+  if (nextSyncedBadgeExpiry != null) {
+    const delay = Math.max(0, nextSyncedBadgeExpiry - Date.now() + 30);
+    syncedBadgeTimeoutId = window.setTimeout(() => {
+      renderCluesFromState();
+      setupValidationButtons();
+    }, delay);
+  }
 }
 
 // Clear offline queue

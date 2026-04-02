@@ -404,6 +404,22 @@ def build_progress_response(assignment):
     }
 
 
+def _append_admin_override_audit(team, *, location_id, game_id, reason):
+    if not team.data:
+        team.data = {}
+
+    overrides = list(team.data.get('admin_overrides', []))
+    overrides.append({
+        'location_id': location_id,
+        'game_id': game_id,
+        'reason': reason,
+        'admin_user_id': current_user.id,
+        'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'
+    })
+    team.data['admin_overrides'] = overrides
+    flag_modified(team, 'data')
+
+
 @api_bp.route('/api/location/<int:location_id>/found', methods=['POST'])
 @login_required
 def mark_location_found(location_id):
@@ -411,7 +427,6 @@ def mark_location_found(location_id):
     game_id = data.get("game_id")
     user_lat = data.get("lat")
     user_lon = data.get("lon")
-    force = data.get("force", False)
     method = (data.get("method") or "direct").lower()
 
     # Validate input
@@ -439,16 +454,6 @@ def mark_location_found(location_id):
     # Check if already found (idempotent behavior)
     if assignment.found:
         return jsonify(build_progress_response(assignment)), 200
-
-    # Admin override (force) check
-    if force and current_user.has_role("admin"):  # Assuming you have a role system
-        assignment.found = True
-        assignment.timestamp_found = datetime.datetime.utcnow()
-        db.session.commit()
-        response = build_progress_response(assignment)
-        response["method"] = method
-        response["client_event_id"] = data.get("client_event_id")
-        return jsonify(response), 200
 
     distance = None
 
@@ -479,6 +484,46 @@ def mark_location_found(location_id):
     if distance is not None:
         response["distance_m"] = round(distance, 2)
 
+    return jsonify(response), 200
+
+
+@api_bp.route('/api/admin/team/<int:team_id>/location/<int:location_id>/confirm_found', methods=['POST'])
+@admin_required
+def admin_confirm_location_found(team_id, location_id):
+    data = request.get_json() or {}
+    game_id = data.get('game_id')
+    reason = (data.get('reason') or 'camera_failed').strip() or 'camera_failed'
+
+    if not game_id:
+        return jsonify({'error': 'Missing game_id'}), 400
+
+    assignment = TeamLocationAssignment.query.filter_by(
+        team_id=team_id,
+        location_id=location_id,
+        game_id=game_id
+    ).first()
+
+    if not assignment:
+        return jsonify({'error': 'Location not assigned to this team'}), 404
+
+    if not assignment.found:
+        assignment.found = True
+        assignment.timestamp_found = datetime.datetime.utcnow()
+
+    team = Team.query.get(team_id)
+    _append_admin_override_audit(
+        team,
+        location_id=location_id,
+        game_id=game_id,
+        reason=reason
+    )
+    db.session.commit()
+
+    response = build_progress_response(assignment)
+    response['method'] = 'admin_confirm'
+    response['override_reason'] = reason
+    response['confirmed_by_user_id'] = current_user.id
+    response['client_event_id'] = data.get('client_event_id')
     return jsonify(response), 200
 
 

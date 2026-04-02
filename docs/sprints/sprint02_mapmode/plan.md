@@ -4,7 +4,7 @@
 
 **Scope:** Backend routing, route template, proximity-triggered "found" flow. No changes to the `findloc` (route mode) experience. No offline sync (Sprint B). No UI redesign.
 
-**Reference:** Review section "Sprint A: Map-Mode Game Experience" in [docs/review-0330.md](../../review-0330.md).
+**Reference:** Historical backlog item "Sprint A — Map-Mode Game Experience" in [docs/backlog.md](../../backlog.md).
 
 **Status:** Implemented and validated on March 30, 2026.
 

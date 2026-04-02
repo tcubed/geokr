@@ -26,6 +26,13 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     background: rgba(245, 158, 11, 0.08);
   }
 
+  .sync-flash-badge {
+    background: rgba(25, 135, 84, 0.14);
+    color: #146c43;
+    border: 1px solid rgba(25, 135, 84, 0.28);
+    font-weight: 600;
+  }
+
   .found-label {
     color: white;
     background-color: rgba(0,0,0,0.6);
@@ -88,29 +95,55 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 /* Make the modal content flexible and centered */
 #selfie-modal .modal-content {
     background-color: #000;
-    margin: 5vh auto; /* 5% vertical margin */
-    padding: 10px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
     border: none;
-    width: 95%; /* Use a percentage for flexible width */
-    max-width: 600px; /* Prevent it from getting too large on big screens */
+  width: min(100%, 640px);
+  min-height: 100vh;
+  max-height: 100vh;
     position: relative;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-    display: flex; /* Use flexbox for vertical alignment */
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
     flex-direction: column;
-    align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  overflow: hidden;
 }
 
 /* Style the close button */
 #selfie-modal .close-btn {
     color: #f1f1f1;
-    font-size: 2.5em;
+  font-size: 2rem;
     font-weight: bold;
     position: absolute;
-    top: 5px;
-    right: 15px;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  right: 16px;
     z-index: 1060;
     cursor: pointer;
+  line-height: 1;
+}
+
+.selfie-header {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.selfie-title {
+  color: #fff;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.selfie-status {
+  color: rgba(255,255,255,0.92);
+  font-size: 0.95rem;
+}
+
+.selfie-status-note {
+  color: rgba(255,255,255,0.68);
+  font-size: 0.82rem;
+  min-height: 1.2rem;
 }
 
 /* Ensure the camera container and video are responsive */
@@ -118,29 +151,68 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     width: 100%;
     position: relative;
     overflow: hidden;
-    /* Optional: Use aspect ratio for consistent sizing */
-    /* padding-top: 75%; /* 4:3 aspect ratio (height is 75% of width) */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: #111;
 }
 
 #camera-stream {
     width: 100%; /* Make video fill its container */
-    height: auto; /* Maintain aspect ratio */
+  height: 100%;
+  max-height: min(60vh, 560px);
     display: block;
+  object-fit: contain;
 }
 
 /* Make the actions section and button responsive */
 .selfie-actions {
     width: 100%;
     text-align: center;
-    margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 #capture-selfie-btn {
-    width: 90%; /* Use a percentage for the button */
-    max-width: 250px;
+  width: 100%;
     padding: 12px 24px;
     font-size: 1.2em;
     border-radius: 50px;
+}
+
+.selfie-help {
+  color: rgba(255,255,255,0.72);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  #selfie-modal {
+    padding: 4vh 16px;
+  }
+
+  #selfie-modal .modal-content {
+    min-height: auto;
+    max-height: 92vh;
+    border-radius: 16px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media (max-width: 480px) {
+  #selfie-modal .modal-content {
+    gap: 10px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  #camera-stream {
+    max-height: 52vh;
+  }
 }
 
 
@@ -178,6 +250,92 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
         opacity: 0;
         transform: translate(var(--x), var(--y)) scale(0);
     }
+}
+
+#sync-status {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10000;
+  font-family: system-ui;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  max-width: min(320px, calc(100vw - 24px));
+}
+
+#sync-status-card {
+  background: rgba(255,255,255,0.94);
+  border-radius: 12px;
+  padding: 7px 9px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  min-width: 200px;
+  font-size: 0.9rem;
+  opacity: 1;
+  transition: opacity 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+#sync-status.sync-idle #sync-status-card {
+  opacity: 0.7;
+}
+
+#sync-status.sync-idle:hover #sync-status-card,
+#sync-status.sync-idle:focus-within #sync-status-card {
+  opacity: 1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  transform: translateY(-1px);
+}
+
+#pending-badge {
+  background:#f59e0b;
+  color:#fff;
+  padding:3px 7px;
+  border-radius:12px;
+  font-size:11px;
+  display:none;
+}
+
+#sync-status-card .small {
+  font-size: 0.8rem !important;
+}
+
+.sync-status-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.sync-status-controls .form-check {
+  min-width: 0;
+}
+
+.sync-status-controls .form-check-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 576px) {
+  #sync-status {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #sync-status-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sync-status-controls {
+    gap: 6px;
+  }
+
+  .sync-status-controls .form-check-label {
+    font-size: 0.76rem;
+  }
 }
 </style>
 
@@ -300,13 +458,13 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
 
 
-<div id="sync-status" style="position: fixed; top: 10px; right: 10px; z-index: 10000; font-family: system-ui; display: flex; gap: 8px; align-items: center;">
-  <div id="pending-badge" style="background:#f59e0b; color:#fff; padding:4px 8px; border-radius:12px; font-size:12px; display:none;">
+<div id="sync-status">
+  <div id="pending-badge">
     ⏳ <span id="pending-count">0</span> pending
   </div>
-  <div style="background: rgba(255,255,255,0.92); border-radius: 12px; padding: 8px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); min-width: 220px;">
+  <div id="sync-status-card">
     <div id="sync-state-text" class="small text-muted">Checking sync status…</div>
-    <div class="d-flex align-items-center gap-2 mt-2">
+    <div class="sync-status-controls">
       <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
       <div class="form-check m-0">
         <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
@@ -328,13 +486,26 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 <div id="selfie-modal" class="modal">
     <div class="modal-content">
         <span class="close-btn">&times;</span>
+    <div class="selfie-header">
+      <p class="selfie-title">Take a selfie</p>
+      <div id="selfie-status-text" class="selfie-status">Starting camera…</div>
+      <div id="selfie-status-note" class="selfie-status-note">Allow camera access if prompted.</div>
+    </div>
         <div class="camera-container">
-            <video id="camera-stream" autoplay playsinline></video>
+      <video id="camera-stream" autoplay playsinline muted></video>
         </div>
         <div class="selfie-actions">
-            <button id="capture-selfie-btn" class="btn btn-primary">
+      <button id="capture-selfie-btn" class="btn btn-primary" type="button" disabled>
                 Capture Selfie
             </button>
+      <button id="selfie-fallback-btn" class="btn btn-outline-light" type="button">
+        Use alternate capture
+      </button>
+      <button id="selfie-retry-btn" class="btn btn-outline-light d-none" type="button">
+        Try camera again
+      </button>
+      <input id="selfie-file-input" class="d-none" type="file" accept="image/*" capture="user">
+      <p class="selfie-help">If the live camera is blurry or unavailable, use alternate capture or ask the organizer.</p>
         </div>
         <img id="selfie-preview" class="d-none" alt="Selfie Preview">
     </div>
@@ -353,6 +524,25 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   console.log('VERSION: ', VERSION)
 </script>
 
+<script id="game-data-json" type="application/json">
+  {{ {
+    'gameId': game.id if game is defined else none,
+    'teamId': team.id if team is defined else none,
+    'locations': locations|default([]),
+    'currentIndex': current_index|default(0),
+    'enable_geolocation': enable_geolocation,
+    'enable_selfie': enable_selfie,
+    'enable_image_verify': enable_image_verify,
+    'enable_qr_scanner': enable_qr_scanner,
+    'bounds': [
+      game.min_lat if game is defined else 0,
+      game.min_lon if game is defined else 0,
+      game.max_lat if game is defined else 0,
+      game.max_lon if game is defined else 0
+    ]
+  } | tojson }}
+</script>
+
 <script type="module">
   import { getCookie } from '/static/js/utils.js?v={{ version }}';
   const locationMode = getCookie('location_mode') || 'none';
@@ -360,22 +550,17 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   window.defaultPosMode = defaultPosMode;
   window.DEBUG_GAME_STATE = true;
 
-  
-  window.GAME_DATA = {
-    gameId: {% if game is defined %}{{ game.id }}{% else %}null{% endif %},
-    teamId: {% if team is defined %}{{ team.id }}{% else %}null{% endif %},
-    locations: {{ locations|tojson|default('[]')|safe }},
-    currentIndex: {{ current_index|default(0) }},
-    enable_geolocation: {{ enable_geolocation | tojson }},
-    enable_selfie: {{ enable_selfie | tojson }},
-    enable_image_verify: {{ enable_image_verify | tojson }},
-    enable_qr_scanner: {{ enable_qr_scanner | tojson }},
-    bounds:[
-      {{ game.min_lat|tojson|default('0') }},
-      {{ game.min_lon|tojson|default('0') }},
-      {{ game.max_lat|tojson|default('0') }},
-      {{ game.max_lon|tojson|default('0') }}
-    ]
+  const gameDataElement = document.getElementById('game-data-json');
+  window.GAME_DATA = gameDataElement ? JSON.parse(gameDataElement.textContent) : {
+    gameId: null,
+    teamId: null,
+    locations: [],
+    currentIndex: 0,
+    enable_geolocation: false,
+    enable_selfie: false,
+    enable_image_verify: false,
+    enable_qr_scanner: false,
+    bounds: [0, 0, 0, 0]
   };
   //console.log('pages GAME_DATA:',window.GAME_DATA)
   window.locationImageUrls = GAME_DATA.locations.map(l => l.image_url).filter(Boolean);

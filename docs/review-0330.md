@@ -5,7 +5,7 @@
 **Status at review:** Post-beta-1, targeting MVP+  
 
 > **Sprint 01 (Security Hardening) completed March 30, 2026 — tagged `v1.0.1-security`.**  
-> All immediate recommendations from Section 8 have been addressed except camera UX (deferred) and `password_hash` migration (deferred). See [docs/sprints/sprint01_security/plan.md](sprints/sprint01_security/plan.md).  
+> Immediate follow-up items from this review now live in [docs/backlog.md](backlog.md). See [docs/sprints/sprint01_security/plan.md](sprints/sprint01_security/plan.md).  
 >
 > **Sprint 02 (Map Mode Game Experience) completed in code and tests on March 30, 2026.**  
 > The `map_hunt` game type is now seeded, dispatched from `index()`, rendered at `/map`, and covered by regression tests. Release/tag step remains manual. See [docs/sprints/sprint02_mapmode/plan.md](sprints/sprint02_mapmode/plan.md).
@@ -118,96 +118,16 @@ The reported awkwardness with the camera is consistent with what's in the code. 
 
 ---
 
-## 7. Future Sprints — Options for Extended Experiences
+## 7. Follow-Up Backlog
 
-These are proposed as bounded sprints, ordered roughly by dependency and value. The goal is to grow from the current "follow one of N routes" mode toward richer experiences with less cellular dependency.
+The March 30 review originally included detailed sprint ideas and immediate next-beta recommendations.
 
----
+Those items now live in [docs/backlog.md](backlog.md) so this file can stay focused on the actual review.
 
-### Sprint A: Map-Mode Game Experience
+In short:
 
-**Goal:** Allow a game type where players are shown a map and must navigate to find a location pin (vs. receiving sequential clue text).
-
-**Status:** ✅ Implemented on March 30, 2026.
-
-**Delivered:**
-- canonical `GameType` seeding for `findloc` and `map_hunt`
-- gametype-aware dispatch from `/`
-- new `/map` route for active `map_hunt` teams
-- `map/play.html` Leaflet UI with progress HUD and popup actions
-- "I'm Here" integration with existing `/api/location/<id>/found` endpoint
-- test coverage for dispatcher, route access, and rendered map payload
-- bug fix in `get_active_team()` so active-team selection is validated by membership query rather than ORM instance identity
-
-**What exists:** `/main` legacy route, `map.js`, `map/debug.html`, `map/map_prefetch.html`, Leaflet already in service worker cache list.
-
-**Remaining follow-up (optional, not blocker for Sprint 02 completion):**
-- retire or repurpose the legacy `/main` route once the map path is fully adopted
-- decide whether map_hunt should support a game-level default for `show_pin = None`
-- add polish around completion UI and operator documentation/screenshots
-
-**Outcome:** Medium effort, completed successfully because the hard parts (Leaflet, geolocation, found API) were already in place.
-
----
-
-### Sprint B: Asset Prefetch & Offline-First Play
-
-**Goal:** Let users download all game assets (clues, images, map tiles) before entering a low-connectivity area, then play fully offline with sync on return.
-
-**What exists:** `offline-db.js`, `offline-game.js`, `offline-sync-sw.js`, `/api/tile-list` endpoint, `map_prefetch.html`, SW tile/image caches, `generate_resume_token` for re-auth.
-
-**What's needed:**
-- Complete the `/api/game/<id>/offline_bundle` endpoint to package locations + images + team assignments as a single JSON payload.
-- Wire `offline-game.js` to consume and write the bundle to IndexedDB.
-- Build the sync-on-reconnect flow: accumulate found-events offline, POST them to `/api/location/<id>/found` when network returns.
-- Replace in-memory tombstone cache with a persistent equivalent (or scope it correctly to SQLite with a `deleted_at` column).
-- Handle conflict: what if two team members both mark a location found while offline?
-- **Activate the `magic_success.html` resume-token flow in `magic_login()`.** The template (`user/magic_success.html`) already exists and stores the token in `localStorage`. During Sprint 01 security work, the `render_template` call after `magic_login` was confirmed dead code (a `return redirect` above it was always reached first) and removed. For Sprint B, `magic_login` should be changed to render `magic_success.html` instead of redirecting directly, so the 30-day resume token is written to `localStorage` before the client navigates to `/findloc`. The `generate_resume_token` / `verify_resume_token` helpers in `auth.py` are already in place.
-
-**Effort estimate:** High. The infrastructure is 60% there but the sync protocol needs careful design (idempotency, conflict rules).
-
----
-
-### Sprint C: Reduce Cellular Data Drain
-
-**Goal:** Lower data usage during active play for groups with limited data plans or rural events.
-
-**Recommendations:**
-- Serve Bootstrap / Leaflet / icons from `static/libs/` (already partially present in `static/libs/`) rather than CDN. This is also needed for fully offline caching.
-- Compress and resize location images at upload time (PIL is already imported and used in `reshape_images.py`). Set a max dimension (e.g., 800px wide) and quality target (~75% JPEG).
-- Use the tile prefetch system (Sprint B) so map tiles are not fetched live during play.
-- Add `Cache-Control` headers on static assets for return visits (currently commented out in `add_header()`).
-- Gzip responses (Flask-Compress) — one-line addition.
-
-**Effort estimate:** Low–Medium. Mostly configuration and plumbing.
-
----
-
-### Sprint D: Multiple Experience Types (Client-Configurable)
-
-**Goal:** Enable clients (event organizers) to choose the game experience their group gets — linear route, map hunt, free-roam, QR-scan-only — without code changes.
-
-**What exists:** `GameType` model, `game.data` JSON blob for per-game config, `gametype_id` FK on `Game`, `show_pin` on `Location`, `enable_*` flags in the `findloc` route call.
-
-**What's needed:**
-- Define a stable set of experience modes: `route` (current), `map_hunt`, `free_roam`, `qr_only`.
-- Store mode in `game.data` or as a new `Game.mode` variant.
-- Build a game-editor UI (or extend Flask-Admin) to let organizers configure mode, branding, and routes without SQL.
-- Activate `enable_qr_scanner`, `enable_geolocation`, `enable_image_verify` flags based on the selected mode.
-- Document the `game.data` JSON schema so organizers (or a future admin UI) know what to set.
-
-**Effort estimate:** Medium–High (mostly the admin-facing game editor).
-
----
-
-## 8. Immediate Recommendations Before Next Beta
-
-1. ~~**Remove the hardcoded `app.secret_key` in `__init__.py`**~~ ✅ *Done — Sprint 01.*
-2. ~~**Set `SESSION_COOKIE_SECURE = True` in `ProdConfig`**~~ ✅ *Done — Sprint 01.*
-3. **Add a "skip / admin-confirm" path on the camera step** to unblock players when the camera interface fails. *(Still open.)*
-4. **Delete or complete `teams/routes.py`** — the `join_team` stub is misleading. *(Still open.)*
-5. ~~**Remove the Basic Auth stub** in `admin/routes.py`~~ ✅ *Done — Sprint 01.*
-6. ~~**Add a `.env.example`** file documenting required env vars~~ ✅ *Done — Sprint 01.*
+- Sprint A / Sprint B ideas from the original review became the implemented Sprint 02 / Sprint 03 workstreams
+- remaining follow-up items such as camera fallback, `teams/routes.py` cleanup, and future experience types are tracked in the backlog
 
 ---
 

@@ -57,22 +57,56 @@
   }
   #sync-status-panel {
     position: fixed;
-    top: 0.75rem;
+    bottom: 0.75rem;
     right: 0.75rem;
     z-index: 1000;
     background: rgba(255,255,255,0.94);
     border-radius: 10px;
-    padding: 0.5rem 0.75rem;
+    padding: 0.4rem 0.55rem;
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    min-width: 220px;
+    min-width: 190px;
+    max-width: min(300px, calc(100vw - 1.5rem));
+    font-size: 0.9rem;
+    opacity: 1;
+    transition: opacity 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+  #sync-status-panel.sync-idle {
+    opacity: 0.7;
+  }
+  #sync-status-panel.sync-idle:hover,
+  #sync-status-panel.sync-idle:focus-within {
+    opacity: 1;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.24);
+    transform: translateY(-1px);
   }
   #pending-badge {
     background: #f59e0b;
     color: #fff;
-    padding: 4px 8px;
+    padding: 3px 7px;
     border-radius: 12px;
-    font-size: 12px;
+    font-size: 11px;
     display: none;
+  }
+  #sync-status-panel .small {
+    font-size: 0.8rem !important;
+  }
+  .sync-status-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  @media (max-width: 576px) {
+    #sync-status-panel {
+      left: 0.75rem;
+      right: 0.75rem;
+      min-width: 0;
+    }
+
+    .sync-status-controls .form-check-label {
+      font-size: 0.76rem;
+    }
   }
 </style>
 {% endblock %}
@@ -93,7 +127,7 @@
 <div id="sync-status-panel">
   <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
   <div id="sync-state-text" class="small text-muted mt-2">Checking sync status…</div>
-  <div class="d-flex align-items-center gap-2 mt-2">
+  <div class="sync-status-controls">
     <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
     <div class="form-check m-0">
       <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
@@ -105,17 +139,26 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='libs/leaflet/leaflet.js') }}"></script>
+<script id="map-play-data-json" type="application/json">
+  {{ {
+    'gameId': game.id,
+    'teamId': team.id,
+    'locations': locations,
+    'bounds': {
+      'minLat': game.min_lat,
+      'maxLat': game.max_lat,
+      'minLng': game.min_lon,
+      'maxLng': game.max_lon
+    }
+  } | tojson }}
+</script>
 <script type="module">
-window.MAP_PLAY_DATA = {
-  gameId: {{ game.id | tojson }},
-  teamId: {{ team.id | tojson }},
-  locations: {{ locations | tojson }},
-  bounds: {
-    minLat: {{ game.min_lat | tojson }},
-    maxLat: {{ game.max_lat | tojson }},
-    minLng: {{ game.min_lon | tojson }},
-    maxLng: {{ game.max_lon | tojson }},
-  }
+const mapPlayDataElement = document.getElementById('map-play-data-json');
+window.MAP_PLAY_DATA = mapPlayDataElement ? JSON.parse(mapPlayDataElement.textContent) : {
+  gameId: null,
+  teamId: null,
+  locations: [],
+  bounds: { minLat: null, maxLat: null, minLng: null, maxLng: null }
 };
 window.GAME_DATA = window.MAP_PLAY_DATA;
 </script>

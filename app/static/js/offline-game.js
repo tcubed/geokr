@@ -56,10 +56,18 @@ function getSubmissionCoordinates(methodResult, locationId) {
 
 function getSyncUIElements() {
   return {
+    syncPanel: document.getElementById('sync-status'),
+    syncCard: document.getElementById('sync-status-card'),
     statusText: document.getElementById('sync-state-text'),
     syncNowButton: document.getElementById('sync-now-btn'),
     allowCellularCheckbox: document.getElementById('allow-cellular-sync'),
   };
+}
+
+function setSyncPanelIdle(isIdle) {
+  const { syncPanel } = getSyncUIElements();
+  if (!syncPanel) return;
+  syncPanel.classList.toggle('sync-idle', Boolean(isIdle));
 }
 
 function setSyncStatusText(message, tone = 'muted') {
@@ -95,17 +103,21 @@ async function refreshSyncStatus() {
   await updatePendingBadge();
 
   if (syncInProgress) {
+    setSyncPanelIdle(false);
     setSyncStatusText('Sync in progress…', 'primary');
     return;
   }
 
   if (summary.total === 0) {
+    setSyncPanelIdle(networkState.online);
     setSyncStatusText(
       networkState.online ? 'All progress synced.' : 'Offline. New finds will queue locally.',
       networkState.online ? 'success' : 'warning'
     );
     return;
   }
+
+  setSyncPanelIdle(false);
 
   if (!networkState.online) {
     setSyncStatusText(`${summary.total} pending. Reconnect to sync.`, 'warning');

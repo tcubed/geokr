@@ -6,7 +6,7 @@
 
 **Criticality:** This sprint is high-risk. Offline play that only “mostly works” is worse than no offline mode at all. The implementation must be gated by rigorous validation before event use.
 
-**Reference:** Review section "Sprint B: Asset Prefetch & Offline-First Play" in [docs/review-0330.md](../../review-0330.md).
+**Reference:** Historical backlog item "Sprint B — Asset Prefetch & Offline-First Play" in [docs/backlog.md](../../backlog.md).
 
 **Status:** In progress.
 
@@ -500,7 +500,7 @@ These principles should govern all Sprint 03 implementation decisions.
 **Status:** ✅ Completed on April 1, 2026.
 
 **Delivered:**
-- Updated [docs/review-0401.md](../../review-0401.md) into an operator/player offline rollout guide.
+- Updated [docs/design/game_flow.md](../../design/game_flow.md) into the operator/player offline rollout guide.
 - Documented:
   - player login and prefetch steps
   - operator pre-event checklist
@@ -521,7 +521,7 @@ These principles should govern all Sprint 03 implementation decisions.
 - troubleshooting for resume-token and sync failures
 
 **Candidate docs:**
-- updated [docs/review-0401.md](../../review-0401.md)
+- updated [docs/design/game_flow.md](../../design/game_flow.md)
 
 **Acceptance criteria:**
 - A non-developer operator can explain the offline flow.

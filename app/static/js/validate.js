@@ -4,15 +4,13 @@
 //import { queueOfflineAction } from './localStorage.js'; // fallback queue for localStorage
 import { showToast } from './common-ui.js';
 import { haversine } from './map.js'; // distance calc helper
-import {gameState,gameId,loadState,saveState} from './localStorage.js'; // Load game state
 //import { showCurrentClue } from './clue-manager.js'; // Show current clue in UI
 //import { GAME_DATA } from './globals.js';
 import {submitLocationValidation} from './offline-game.js'; // main API wrapper for submitting validation
-import { captureSelfieBlob } from '/static/js/validate-selfie.js';
-import { startCamera, getSelfieBlobInset} from './camera.js';
+import { startCamera, stopCamera, captureCurrentSelfieBlob } from './camera.js';
 
-// Declare the variable in the global scope of the module
-let currentSelfieLocationId = null;
+let activeSelfieContext = null;
+let selfieModalHandlersBound = false;
 
 const offlineDB = self.offlineDB; // Explicit for clarity
 const sendOrQueue = self.sendOrQueue; // Explicit for clarity
@@ -107,8 +105,155 @@ function showFeedback(message, status) {
   console.log(`[${status.toUpperCase()}] ${message}`);
 }
 
+function getSelfieModalElements() {
+  return {
+    modal: document.getElementById('selfie-modal'),
+    closeButton: document.querySelector('#selfie-modal .close-btn'),
+    captureButton: document.getElementById('capture-selfie-btn'),
+    fallbackButton: document.getElementById('selfie-fallback-btn'),
+    retryButton: document.getElementById('selfie-retry-btn'),
+    fileInput: document.getElementById('selfie-file-input')
+  };
+}
+
+function resetSelfieFileInput() {
+  const { fileInput } = getSelfieModalElements();
+  if (fileInput) {
+    fileInput.value = '';
+  }
+}
+
+function closeSelfieModal() {
+  const { modal } = getSelfieModalElements();
+  stopCamera();
+  resetSelfieFileInput();
+  activeSelfieContext = null;
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+async function submitSelfieValidation(photoBlob, locationId, gameId, extraMetadata = {}) {
+  const result = {
+    passed: true,
+    mode: 'selfie',
+    locationId,
+    metadata: {
+      selfieSize: photoBlob.size,
+      ...extraMetadata
+    },
+    needsValidation: true,
+    photoBlob
+  };
+  submitLocationValidation(result, gameId);
+}
+
+async function restartLiveSelfieCamera() {
+  if (!activeSelfieContext) {
+    return;
+  }
+
+  try {
+    await startCamera();
+  } catch (err) {
+    console.error('[validate.js] Live camera start failed:', err);
+    showToast(err.message, { type: 'warning', duration: 5000 });
+  }
+}
+
+function initializeSelfieModal() {
+  if (selfieModalHandlersBound) {
+    return;
+  }
+
+  const { modal, closeButton, captureButton, fallbackButton, retryButton, fileInput } = getSelfieModalElements();
+  if (!modal || !closeButton || !captureButton || !fallbackButton || !retryButton || !fileInput) {
+    return;
+  }
+
+  closeButton.addEventListener('click', () => {
+    closeSelfieModal();
+  });
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      closeSelfieModal();
+    }
+  });
+
+  captureButton.addEventListener('click', async () => {
+    if (!activeSelfieContext) {
+      return;
+    }
+
+    try {
+      const { blob, locationId, usedInset } = await captureCurrentSelfieBlob(
+        activeSelfieContext.locationId,
+        activeSelfieContext.locationImageUrl
+      );
+
+      if (activeSelfieContext.locationImageUrl && !usedInset) {
+        showToast('Captured without clue inset because the clue image could not be loaded.', {
+          type: 'warning',
+          duration: 5000
+        });
+      }
+
+      const gameId = activeSelfieContext.gameId;
+      closeSelfieModal();
+      await submitSelfieValidation(blob, locationId, gameId, {
+        captureSource: 'live_camera',
+        usedInset
+      });
+    } catch (err) {
+      console.error('[validate.js] Selfie capture failed:', err);
+      showToast('Selfie capture failed: ' + err.message, { type: 'error', duration: 5000 });
+      await restartLiveSelfieCamera();
+    }
+  });
+
+  fallbackButton.addEventListener('click', () => {
+    resetSelfieFileInput();
+    fileInput.click();
+  });
+
+  retryButton.addEventListener('click', async () => {
+    await restartLiveSelfieCamera();
+  });
+
+  fileInput.addEventListener('change', async (event) => {
+    if (!activeSelfieContext) {
+      resetSelfieFileInput();
+      return;
+    }
+
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('Please choose an image file for alternate capture.', { type: 'error' });
+      resetSelfieFileInput();
+      return;
+    }
+
+    const { locationId, gameId } = activeSelfieContext;
+    closeSelfieModal();
+    await submitSelfieValidation(file, locationId, gameId, {
+      captureSource: 'file_input',
+      usedInset: false
+    });
+    showToast('Alternate capture selected. Uploading photo…', { type: 'success' });
+  });
+
+  selfieModalHandlersBound = true;
+}
+
 // A single function to set up all validation buttons using event delegation
 export function setupValidationButtons() {
+  initializeSelfieModal();
+
     // The container that holds all the dynamically generated location cards
     const container = document.querySelector('#locationAccordion');
     if (!container) return;
@@ -188,80 +333,21 @@ export function setupValidationButtons() {
         else if (button.matches('.btn-validate-selfie')) {
             console.log(`[validate.js] Selfie validation for locationId: ${locationId}`);
 
-            // // Disable the button to prevent multiple captures
-            // button.disabled = true;
+          const { modal } = getSelfieModalElements();
+          activeSelfieContext = {
+            locationId,
+            locationImageUrl,
+            gameId
+          };
 
-            // try {
-            //     const photoBlob = await captureSelfieBlob();
-            //     // After a successful capture, the camera stream will be stopped.
-            //     // Re-enable the button if needed, or handle as part of the next step.
-            //     button.disabled = false;
-
-            //     const result = {
-            //         passed: true, // Assuming local capture is a "pass" for now
-            //         mode: 'selfie',
-            //         locationId: locationId,
-            //         metadata: { selfieSize: photoBlob.size },
-            //         needsValidation: true, // The selfie still needs server validation
-            //         photoBlob
-            //     };
-            //     // Log the result object to verify the locationId is present
-            //     console.log('[validate.js] Result object:', result);
-            //     submitLocationValidation(result, gameId);
-            // } catch (err) {
-            //     console.log('[validate.js] '+err.message)
-            //     showToast('Selfie capture failed: ' + err.message, { type: 'error' });
-            //     button.disabled = false; // Re-enable button on failure
-            // }
-            // currentSelfieLocationId = button.closest('.clue-card').dataset.locationId;
-
-            // const modal = document.getElementById('selfie-modal');
-            // modal.style.display = 'block';
-
-            // // Now, start the camera feed
-            // try {
-            //     await startCamera();
-            // } catch (err) {
-            //     // Handle camera failure
-            //     modal.style.display = 'none';
-            // }
-            console.log(`[validate.js] Selfie validation for locationId: ${locationId}`);
-            
-            const modal = document.getElementById('selfie-modal');
             modal.style.display = 'block';
 
             try {
-                // 1. Start the camera and show the modal
                 await startCamera();
-
-                // 2. Wait for the user to capture the selfie
-                //const { blob: photoBlob, locationId: capturedLocationId } = await getSelfieBlob(locationId);
-                console.log('[validate], loc.id:'+locationId+', locationImageUrl:'+locationImageUrl)
-                console.log('[validate], locationImageUrl:',locationImageUrl)
-
-                const { blob: photoBlob, locationId: capturedLocationId } = await getSelfieBlobInset(locationId,locationImageUrl);
-
-                // 3. Hide the modal and submit the validation
-                modal.style.display = 'none';
-
-                const result = {
-                    passed: true,
-                    mode: 'selfie',
-                    locationId: capturedLocationId,
-                    metadata: { selfieSize: photoBlob.size },
-                    needsValidation: true,
-                    photoBlob
-                };
-                submitLocationValidation(result, gameId);
-
             } catch (err) {
                 console.error('[validate.js] Selfie capture failed:', err);
-                showToast('Selfie capture failed: ' + err.message, { type: 'error' });
-                modal.style.display = 'none';
+            showToast(err.message, { type: 'warning', duration: 5000 });
             }
-
-
-
         }
         
         // --- QR SCANNER VALIDATION ---

@@ -20,12 +20,19 @@ function createClientEventId() {
 
 function getSyncElements() {
   return {
+    syncPanel: document.getElementById('sync-status-panel'),
     pendingBadge: document.getElementById('pending-badge'),
     pendingCount: document.getElementById('pending-count'),
     syncStateText: document.getElementById('sync-state-text'),
     syncNowButton: document.getElementById('sync-now-btn'),
     allowCellularCheckbox: document.getElementById('allow-cellular-sync'),
   };
+}
+
+function setSyncPanelIdle(isIdle) {
+  const { syncPanel } = getSyncElements();
+  if (!syncPanel) return;
+  syncPanel.classList.toggle('sync-idle', Boolean(isIdle));
 }
 
 function setSyncText(message, tone = 'muted') {
@@ -51,7 +58,7 @@ function buildPopupHtml(loc) {
   const isPending = Boolean(loc.isOffline);
   const disabled = loc.found && !isPending ? 'disabled' : '';
   const btnClass = isPending ? 'popup-found-btn pending' : (loc.found ? 'popup-found-btn found-ok' : 'popup-found-btn');
-  const btnLabel = isPending ? 'Pending sync' : (loc.found ? '✓ Found' : "I'm Here");
+  const btnLabel = isPending ? 'Pending' : (loc.found ? '✓ Found' : "I'm Here");
   const clue = loc.clue_text ? `<p style="font-size:0.82rem;margin:0.25rem 0 0.5rem">${escHtml(loc.clue_text)}</p>` : '';
   const syncNote = isPending ? '<div class="small text-warning">Saved offline. Will sync later.</div>' : '';
   return `
@@ -126,7 +133,7 @@ async function createMapController() {
     const progress = computeProgressSummary(data.locations);
     let text = `${progress.found} / ${progress.total} found`;
     if (progress.pending > 0) {
-      text += ` · ${progress.pending} pending sync`;
+      text += ` · ${progress.pending} pending`;
     }
     hudCount.textContent = text;
   }
@@ -206,13 +213,16 @@ async function createMapController() {
     if (syncNowButton) syncNowButton.disabled = syncInProgress || summary.total === 0 || !networkState.online;
 
     if (syncInProgress) {
+      setSyncPanelIdle(false);
       setSyncText('Sync in progress…', 'primary');
       return;
     }
     if (summary.total === 0) {
+      setSyncPanelIdle(networkState.online);
       setSyncText(networkState.online ? 'All progress synced.' : 'Offline. New finds will queue locally.', networkState.online ? 'success' : 'warning');
       return;
     }
+    setSyncPanelIdle(false);
     if (!networkState.online) {
       setSyncText(`${summary.total} pending. Reconnect to sync.`, 'warning');
       return;
