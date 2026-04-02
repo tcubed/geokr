@@ -73,36 +73,26 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   }
   .sync-toolbar-inner {
-    padding: 0.35rem 0.75rem;
-  }
-  .sync-toolbar-summary {
-    width: 100%;
+    padding: 0.3rem 0.75rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    background: none;
-    border: 0;
-    padding: 0;
-    text-align: left;
-    color: inherit;
+    flex-wrap: wrap;
   }
   .sync-toolbar-message {
-    min-width: 0;
-    font-size: 0.82rem;
+    min-width: 120px;
+    font-size: 0.76rem;
+    line-height: 1.1;
+    flex: 1 1 180px;
   }
-  .sync-toolbar-summary-right {
-    display: flex;
+  .sync-toolbar-controls {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-  .sync-toolbar-body {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding-top: 0.35rem;
+    justify-content: flex-end;
+    gap: 10px;
+    flex: 999 1 auto;
+    flex-wrap: wrap;
   }
   #pending-badge {
     background: #f59e0b;
@@ -112,24 +102,43 @@
     font-size: 11px;
     display: none;
   }
-  .sync-toolbar-body .small,
   .sync-toolbar-message.small {
-    font-size: 0.8rem !important;
+    font-size: 0.76rem !important;
   }
-  .sync-toolbar-body .form-check-label {
+  .sync-toolbar-controls .form-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0;
+  }
+  .sync-toolbar-controls .form-check-input {
+    margin-top: 0;
+  }
+  .sync-toolbar-controls .form-check-label {
     white-space: nowrap;
+    font-size: 0.74rem;
+  }
+  .sync-toolbar-controls .btn {
+    padding-top: 0.18rem;
+    padding-bottom: 0.18rem;
+    font-size: 0.74rem;
   }
   @media (max-width: 576px) {
     .sync-toolbar-inner {
       padding-left: 0.5rem;
       padding-right: 0.5rem;
+      gap: 8px;
     }
-    .sync-toolbar-body {
-      flex-wrap: wrap;
-      justify-content: flex-start;
-      gap: 8px 12px;
+    .sync-toolbar-message {
+      flex-basis: 100%;
+      min-width: 0;
     }
-    .sync-toolbar-body .form-check-label {
+    .sync-toolbar-controls {
+      width: 100%;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .sync-toolbar-controls .form-check-label {
       font-size: 0.76rem;
     }
   }
@@ -139,13 +148,9 @@
 {% block subnav %}
 <div id="sync-toolbar" class="sync-toolbar sync-idle">
   <div class="sync-toolbar-inner">
-    <div class="sync-toolbar-summary">
-      <div id="sync-state-text" class="sync-toolbar-message small text-muted">Checking sync status…</div>
-      <div class="sync-toolbar-summary-right">
-        <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
-      </div>
-    </div>
-    <div id="sync-toolbar-body" class="sync-toolbar-body">
+    <div id="sync-state-text" class="sync-toolbar-message small text-muted">Checking sync status…</div>
+    <div class="sync-toolbar-controls">
+      <div id="pending-badge">⏳ <span id="pending-count">0</span> pending</div>
       <button id="sync-now-btn" type="button" class="btn btn-sm btn-outline-primary">Sync now</button>
       <div class="form-check m-0">
         <input class="form-check-input" type="checkbox" id="allow-cellular-sync">
