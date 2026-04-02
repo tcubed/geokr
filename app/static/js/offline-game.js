@@ -273,7 +273,7 @@ export async function submitLocationValidation(methodResult) {
 // console.log('[offline-game] root.gameState', root.gameState);
 // console.log('[offline-game] imported gameState', gameState);
 
-  const { passed, locationId, mode, metadata, needsValidation } = methodResult;
+  const { passed, locationId, mode, metadata, needsValidation, photoBlob } = methodResult;
   if (!passed) {
     showToast(`Failed to validate via ${mode}: ${methodResult.reason}`, { type: 'error' });
     return;
@@ -340,6 +340,16 @@ export async function submitLocationValidation(methodResult) {
     team_id: payload.team_id,
     location_id: payload.location_id,
   };
+
+  if (mode === 'selfie' && photoBlob) {
+    update.url = '/api/location/found';
+    update.body = {
+      __multipart: true,
+      data: payload,
+      photo: photoBlob,
+      photoName: photoBlob.name || `selfie-${payload.team_id}-${locationId}.jpg`,
+    };
+  }
 
   await sendOrQueue(update, {
     onSuccess: (data) => {

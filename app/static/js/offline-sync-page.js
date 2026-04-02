@@ -41,6 +41,23 @@
   }
 
   function buildFetchOptions(update) {
+    if (update.body?.__multipart) {
+      const formData = new FormData();
+      const payload = update.body?.data || {};
+      formData.append('data', JSON.stringify(payload));
+
+      const photo = update.body?.photo;
+      if (photo instanceof Blob) {
+        formData.append('photo', photo, update.body?.photoName || 'selfie.jpg');
+      }
+
+      return {
+        method: update.method || 'POST',
+        body: formData,
+        credentials: 'same-origin',
+      };
+    }
+
     if (update.body instanceof FormData) {
       return {
         method: update.method || 'POST',
@@ -325,14 +342,15 @@
           console.log('[offlineSync] Merging offline queued updates:', queued);
         }
         queued.forEach(u => {
-          if (u.body?.location_id != null) {
-            const idx = gameState.locations.findIndex(l => l.id == u.body.location_id);
-            if (idx !== -1) {
-              gameState.locations[idx].found = true;
-              gameState.locations[idx].isOffline = true;
-              gameState.locations[idx].syncedAt = null;
-              if (idx >= gameState.currentIndex) gameState.currentIndex = idx + 1;
-              console.log(`[offlineSync] Offline update applied: location_id=${u.body.location_id}, index=${idx}`);
+          const queuedLocationId = u.body?.location_id ?? u.body?.data?.location_id;
+          if (queuedLocationId != null) {
+            const queuedIdx = gameState.locations.findIndex(l => String(l.id) === String(queuedLocationId));
+            if (queuedIdx !== -1) {
+              gameState.locations[queuedIdx].found = true;
+              gameState.locations[queuedIdx].isOffline = true;
+              gameState.locations[queuedIdx].syncedAt = null;
+              if (queuedIdx >= gameState.currentIndex) gameState.currentIndex = queuedIdx + 1;
+              console.log(`[offlineSync] Offline update applied: location_id=${queuedLocationId}, index=${queuedIdx}`);
             }
           }
         });

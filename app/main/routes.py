@@ -2,6 +2,7 @@ import os
 import time
 import random
 import json
+import re
 from datetime import datetime, timedelta
 from itertools import cycle
 from PIL import Image
@@ -77,6 +78,19 @@ def get_active_team(user):
     if first_membership:
         session['active_team_id'] = first_membership.team_id
         return first_membership.team
+
+
+def _slugify_team_name(team_name, fallback='team'):
+    slug = re.sub(r'[^a-z0-9]+', '-', (team_name or '').lower()).strip('-')
+    return slug or fallback
+
+
+def _build_selfie_filename(team_name, original_filename, fallback_slug='team'):
+    team_slug = _slugify_team_name(team_name, fallback=fallback_slug)
+    ext = os.path.splitext(secure_filename(original_filename or 'selfie.jpg'))[1].lower() or '.jpg'
+    date_part = datetime.utcnow().strftime('%m%d')
+    unique_suffix = f"{random.getrandbits(24):06x}"
+    return f"{team_slug}-{date_part}-{unique_suffix}-selfie{ext}"
         
     return None
 
@@ -811,10 +825,14 @@ def mark_location_found():
     # Handle the image submission if applicable
     if method == 'selfie' and photo:
         current_app.logger.info(f"Processing selfie for team {team_id}, location {location_id}.")
+        team = Team.query.filter_by(id=team_id).first()
+
         # 1. Sanitize filename & define path
-        filename = secure_filename(photo.filename)
-        # Generate a unique filename to avoid collisions
-        unique_filename = f"{team_id}-{location_id}-{datetime.utcnow().timestamp()}-{filename}"
+        unique_filename = _build_selfie_filename(
+            team.name if team else None,
+            photo.filename,
+            fallback_slug=f"team-{team_id}"
+        )
         filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
         
         # 2. Process and save the image
@@ -832,7 +850,6 @@ def mark_location_found():
             return jsonify({"success": False, "message": f"Failed to process image: {e}"}), 500
 
         # 3. Update the Team's .data attribute
-        team = Team.query.filter_by(id=team_id).first()
         if team:
 
             # try:
