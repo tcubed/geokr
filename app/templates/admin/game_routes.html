@@ -1,11 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Manage Game Routes{% endblock %}
+{% block title %}{% if game %}Manage Routes - {{ game.name }}{% else %}Manage Game Routes{% endif %}{% endblock %}
 
 {% block content %}
-<div class="container my-4">
-  <h2>Manage Routes</h2>
+<div class="container my-4" id="gameRoutesPage" {% if game %}data-game-id="{{ game.id }}"{% endif %}>
+  <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-3">
+    <div>
+      <h2 class="mb-1">Manage Routes{% if game %} - {{ game.name }}{% endif %}</h2>
+      {% if game %}
+      <p class="text-muted mb-0">Editing routes for this game. No separate game selection is required.</p>
+      {% else %}
+      <p class="text-muted mb-0">Select a game to load and edit its routes.</p>
+      {% endif %}
+    </div>
+    {% if game %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.game_admin_edit', game_id=game.id) }}">Back to Edit Game</a>
+    {% endif %}
+  </div>
 
   <!-- Game Selector -->
+  {% if not game %}
   <div class="mb-3">
     <label for="gameSelect" class="form-label">Select Game:</label>
     <select id="gameSelect" class="form-select">
@@ -15,6 +28,7 @@
       {% endfor %}
     </select>
   </div>
+  {% endif %}
 
   <!-- Routes Container -->
   <div id="routesContainer" class="mt-4">

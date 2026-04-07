@@ -1,25 +1,34 @@
 import { showToast } from './common-ui.js';
 
-// function showToast(message, isError = false) {
-//   const container = document.getElementById('sync-toast-container');
-//   const toast = document.createElement('div');
-//   toast.className = `alert alert-${isError ? 'danger' : 'success'} p-2 mb-1`;
-//   toast.textContent = message;
-//   container.appendChild(toast);
-//   setTimeout(() => toast.remove(), 4000);
-// }
-
 document.addEventListener('DOMContentLoaded', () => {
-  
   const table = document.getElementById('gamesTable');
+  if (!table) return;
+
+  function renderStatusMarkup(status) {
+    if (status === 'ongoing') {
+      return '<span class="badge text-bg-success text-uppercase">ongoing</span>';
+    }
+    if (status === 'ready') {
+      return '<span class="badge text-bg-primary text-uppercase">ready</span>';
+    }
+    if (status === 'complete') {
+      return '<span class="badge text-bg-secondary text-uppercase">complete</span>';
+    }
+    return '<span class="text-muted">&mdash;</span>';
+  }
+
+  function updateRowStatus(row, status) {
+    const statusCell = row.querySelector('[data-role="game-status"]');
+    if (!statusCell) return;
+    statusCell.dataset.status = status || '';
+    statusCell.innerHTML = renderStatusMarkup(status || '');
+  }
 
   // All actions and their endpoints live here:
   const actionsMap = {
     start: (gameId) => `/api/game/${gameId}/start_game`,
     clear: (gameId) => `/api/game/${gameId}/clear_assignments`,
-    reset: (teamId) => `/api/team/${teamId}/reset_locations`,
-    // add new ones here, no JS logic below changes
-    // pause: (gameId) => `/api/games/${gameId}/pause`,
+    reset: (gameId) => `/api/game/${gameId}/reset_locations`,
   };
 
   table.addEventListener('click', async (e) => {
@@ -41,19 +50,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const resp = await fetch(endpointFn(gameId), { method: 'POST' });
-      if (!resp.ok) throw new Error(await resp.text());
-
-      //showToast(`Action "${action}" completed for game ${gameId}`);
-
-      // Check if the response is OK (status 200-299)
+      const payload = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-          // If the response is not OK, parse the error message from the response body
-          const errorData = await resp.json();
-          throw new Error(errorData.message || 'An unknown error occurred.');
+        throw new Error(payload.message || payload.error || 'An unknown error occurred.');
       }
 
-      // If the response is OK, parse the success message from the response body
-      const successData = await resp.json();
+      const successData = payload;
+      if (Object.prototype.hasOwnProperty.call(successData, 'status')) {
+        updateRowStatus(row, successData.status);
+      }
       showToast(successData.message);
 
     } catch (err) {

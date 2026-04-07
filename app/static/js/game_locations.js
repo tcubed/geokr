@@ -1,10 +1,35 @@
 import { showToast } from '/static/js/common-ui.js';
 
+const page = document.getElementById('gameLocationsPage');
 const gameSelect = document.getElementById('gameSelect');
 const container = document.getElementById('locationsContainer');
+const filterInput = document.getElementById('filterInput');
+const boundGameId = page?.dataset.gameId || '';
 
 let availableImages = [];
 let allLocations = []; // keep full list for filtering
+
+function getActiveGameId() {
+  return boundGameId || gameSelect?.value || '';
+}
+
+async function loadLocations(gameId) {
+  if (!gameId) {
+    allLocations = [];
+    renderLocations([]);
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/locations?game_id=${gameId}`);
+    const locations = await resp.json();
+    allLocations = locations; // store full list for filtering
+    console.log('loaded locations:', locations);
+    renderLocations(locations, filterInput.value);
+  } catch (err) {
+    showToast('Failed to load locations: ' + err.message, { type: 'danger' });
+  }
+}
 
 // Fetch available images once
 async function fetchImages() {
@@ -22,9 +47,6 @@ async function fetchImages() {
 
 // Initialize images on page load
 fetchImages();
-//console.log('availableImages:', availableImages);
-
-const filterInput = document.getElementById('filterInput');
 // Filter cards based on input
 filterInput.addEventListener('input', () => {
     console.log('filterInput input triggered');
@@ -37,21 +59,14 @@ filterInput.addEventListener('input', () => {
   renderLocations(filtered, filterText);
 });
 
-gameSelect.addEventListener('change', async () => {
-    console.log('gameSelect change triggered');
-  const gameId = gameSelect.value;
-  if (!gameId) return;
-
-  try {
-    const resp = await fetch(`/api/locations?game_id=${gameId}`);
-    const locations = await resp.json();
-    allLocations = locations; // store full list for filtering
-    console.log('game select locations:',locations);
-    renderLocations(locations);
-  } catch (err) {
-    showToast('Failed to load locations: ' + err.message, { type: 'danger' });
-  }
-});
+if (gameSelect) {
+  gameSelect.addEventListener('change', async () => {
+      console.log('gameSelect change triggered');
+    const gameId = gameSelect.value;
+    if (!gameId) return;
+    await loadLocations(gameId);
+  });
+}
 
 function renderLocations(locs, filterText = '') {
   container.innerHTML = '';
@@ -62,7 +77,7 @@ function renderLocations(locs, filterText = '') {
   console.log('filteredImages:',filteredImages);
 
   // Add "New Location" card at the top
-  if (gameSelect.value) {
+  if (getActiveGameId()) {
     const newCard = document.createElement('div');
     newCard.className = 'col-md-4';
     newCard.innerHTML = `
@@ -211,7 +226,7 @@ container.addEventListener('click', async (e) => {
       const latitude = latRaw === '' ? null : Number(latRaw);
       const longitude = lonRaw === '' ? null : Number(lonRaw);
 
-      const gameId = gameSelect.value;
+      const gameId = getActiveGameId();
 
       if (image.startsWith('/static/images/')) image = image.replace('/static/images/', '');
 
@@ -320,6 +335,10 @@ uploadForm.addEventListener('submit', async (evt) => {
   if (currentImageCallback) currentImageCallback(data.path);
   bootstrap.Modal.getInstance(uploadModalEl).hide();
 });
+
+if (boundGameId) {
+  loadLocations(boundGameId);
+}
 
 // image upload preview
 

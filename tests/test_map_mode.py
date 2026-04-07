@@ -70,6 +70,37 @@ def _create_map_hunt_team(user_id):
     return {'team_id': team_id, 'game_id': game_id, 'loc_id': loc_id, 'user_id': user_id}
 
 
+def _create_map_hunt_team_without_assignments(user_id):
+    gametype = _get_or_create_gametype('map_hunt')
+
+    game = Game(name='Legacy Map Hunt', gametype_id=gametype.id)
+    _db.session.add(game)
+    _db.session.flush()
+
+    location = Location(
+        game_id=game.id,
+        name='Legacy Clue Spot',
+        latitude=40.7128,
+        longitude=-74.0060,
+        clue_text='Legacy location with no assignments yet',
+        show_pin=None,
+    )
+    _db.session.add(location)
+    _db.session.flush()
+
+    team = Team(name='Legacy Map Team', game_id=game.id)
+    _db.session.add(team)
+    _db.session.flush()
+
+    _db.session.add(TeamMembership(user_id=user_id, team_id=team.id, role='captain'))
+    _db.session.commit()
+    team_id = team.id
+    game_id = game.id
+    loc_id = location.id
+    _db.session.remove()
+    return {'team_id': team_id, 'game_id': game_id, 'loc_id': loc_id, 'user_id': user_id}
+
+
 def _create_findloc_team(user_id):
     gametype = _get_or_create_gametype('findloc')
 
@@ -93,6 +124,24 @@ def _create_findloc_team(user_id):
 def map_hunt_client(app, client, regular_user_id):
     with app.app_context():
         state = _create_map_hunt_team(regular_user_id)
+
+    login_response = client.post(
+        '/register_or_login',
+        data={'email': 'user@test.com', 'display_name': 'Test User'},
+        follow_redirects=False,
+    )
+    assert login_response.status_code in (301, 302)
+
+    with client.session_transaction() as sess:
+        sess['active_team_id'] = state['team_id']
+
+    return client, state
+
+
+@pytest.fixture
+def legacy_map_hunt_client(app, client, regular_user_id):
+    with app.app_context():
+        state = _create_map_hunt_team_without_assignments(regular_user_id)
 
     login_response = client.post(
         '/register_or_login',
@@ -206,3 +255,70 @@ class TestMapRoute:
         client, _state = map_hunt_client
         response = client.get('/map')
         assert b'found' in response.data
+
+    def test_map_hunt_falls_back_to_game_locations_without_assignments(self, legacy_map_hunt_client):
+        client, _state = legacy_map_hunt_client
+        response = client.get('/map')
+        assert response.status_code == 200
+        assert b'Legacy Clue Spot' in response.data
+
+    def test_map_hunt_computes_bounds_from_locations_when_game_bounds_missing(self, legacy_map_hunt_client):
+        client, _state = legacy_map_hunt_client
+        response = client.get('/map')
+        assert response.status_code == 200
+        assert b'40.7128' in response.data
+        assert b'-74.006' in response.data
+
+
+class TestLegacyMapAssignments:
+    def test_regular_found_endpoint_creates_legacy_map_assignments(self, app, client, regular_user_id):
+        with app.app_context():
+            state = _create_map_hunt_team_without_assignments(regular_user_id)
+
+        login_response = client.post(
+            '/register_or_login',
+            data={'email': 'user@test.com', 'display_name': 'Test User'},
+            follow_redirects=False,
+        )
+        assert login_response.status_code in (301, 302)
+
+        rv = client.post(
+            f"/api/location/{state['loc_id']}/found",
+            json={
+                'game_id': state['game_id'],
+                'lat': 40.7128,
+                'lon': -74.0060,
+                'method': 'geo',
+            },
+        )
+        assert rv.status_code == 200
+        data = rv.get_json()
+        assert data['success'] is True
+        assert data['team_progress']['found'] == 1
+        assert data['team_progress']['total'] == 1
+
+    def test_admin_confirm_endpoint_creates_legacy_map_assignments(self, app, client, regular_user_id):
+        with app.app_context():
+            state = _create_map_hunt_team_without_assignments(regular_user_id)
+
+        login_response = client.post(
+            '/register_or_login',
+            data={'email': 'admin@test.com', 'display_name': 'Admin User'},
+            follow_redirects=False,
+        )
+        assert login_response.status_code in (301, 302)
+
+        rv = client.post(
+            f"/api/admin/team/{state['team_id']}/location/{state['loc_id']}/confirm_found",
+            json={
+                'game_id': state['game_id'],
+                'reason': 'debug_mode',
+                'client_event_id': 'evt-legacy-map-admin',
+            },
+        )
+        assert rv.status_code == 200
+        data = rv.get_json()
+        assert data['success'] is True
+        assert data['method'] == 'admin_confirm'
+        assert data['team_progress']['found'] == 1
+        assert data['team_progress']['total'] == 1

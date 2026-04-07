@@ -58,6 +58,12 @@
     }
     .navbar-custom {
       background-color: var(--bs-primary) !important;
+      position: relative;
+      z-index: 1035;
+    }
+
+    .navbar-custom .dropdown-menu {
+      z-index: 1045;
     }
 
     .navbar-brand-wrap {
@@ -190,28 +196,28 @@
     <button id="closeOfflineBanner" aria-label="Close">&times;</button>
   </div>
 
-  <nav class="navbar navbar-expand-lg navbar-dark navbar-custom"
+  <nav id="app-navbar" class="navbar navbar-expand-lg navbar-dark navbar-custom"
     style="{% if navbar_color %}--bs-primary: {{ navbar_color }};{% endif %}">
 
     <div class="container-fluid">
       <a class="navbar-brand d-flex align-items-center navbar-brand-wrap" href="/">
     <!-- Left stack -->
     <div class="d-flex flex-column align-items-center me-3 brand-stack">
-      <img src="{{ url_for('static', filename=brand_icon) }}"
+      <img id="brand-icon-img" src="{{ url_for('static', filename=brand_icon) }}"
            alt="{{ brand_icon_alt }}"
            style="height:40px; width:auto;"
            class="">
            <!--
       <span class="fs-4 fw-bold">MyApp</span>
       -->
-      <div class="brand-caption">{{ brand_icon_alt }}</div>
+      <div id="brand-caption" class="brand-caption">{{ brand_icon_alt }}</div>
     </div>
 
     <!-- Right: back arrow (only on account page) -->
     {% if request.endpoint == 'main.account' %}
       <div id="online-status" class="d-flex flex-column align-items-center text-center">
         <a class="btn btn-outline-light fw-bold text-center"
-           href="{{ url_for('main.findloc') }}"
+            href="{{ url_for('main.index') }}"
            title="Back to game">
           <i class="bi bi-arrow-left"></i>
         </a>
@@ -236,12 +242,12 @@
           </a>
           {% if current_user.is_authenticated %}
             {% if game and game.name %}
-            <div class="navbar-meta">
+            <div id="navbar-game-meta" class="navbar-meta">
               Game: {{ game.name }}
             </div>
             {% endif %}
            {% if team and team.name %}
-              <div class="navbar-meta">
+              <div id="navbar-team-meta" class="navbar-meta">
                 Team: {{team.name}}
               </div>
               {% endif %}
@@ -273,8 +279,6 @@
                 <li><h6 class="dropdown-header text-muted small fw-bold">Admin Tools</h6></li>
                 <a class="dropdown-item" href="{{ url_for('main.game_admin') }}">Game Mgmt</a>
                 <a class="dropdown-item" href="{{ url_for('main.game_status') }}">Game Status</a>
-                <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_locations') }}">Game Locations</a>
-                <a class="dropdown-item" href="{{ url_for('admin_cust.manage_game_routes') }}">Game Routes</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.delete_selfies') }}">Delete Selfies</a>
                 <a class="dropdown-item" href="{{ url_for('admin_cust.copy_locations') }}">Copy Locations</a>
                 

@@ -8,9 +8,12 @@ import { haversine } from './map.js'; // distance calc helper
 //import { GAME_DATA } from './globals.js';
 import {submitLocationValidation} from './offline-game.js'; // main API wrapper for submitting validation
 import { startCamera, stopCamera, captureCurrentSelfieBlob } from './camera.js';
+import { startQRScanner, stopQRScanner } from './qr.js';
 
 let activeSelfieContext = null;
 let selfieModalHandlersBound = false;
+let activeQrContext = null;
+let qrModalHandlersBound = false;
 
 const offlineDB = self.offlineDB; // Explicit for clarity
 const sendOrQueue = self.sendOrQueue; // Explicit for clarity
@@ -73,10 +76,14 @@ export function directMark(locationId) {
 }
 
 export function handleQrScan(scannedCode, expectedLocationId) {
-  const passed = scannedCode === expectedLocationId;
-  return passed
-    ? { passed: true, mode: 'qr', locationId: expectedLocationId, metadata: { scannedCode }, needsValidation: false }
-    : { passed: false, mode: 'qr', locationId: expectedLocationId, reason: 'QR mismatch' };
+  return {
+    passed: true,
+    mode: 'qr',
+    locationId: expectedLocationId,
+    metadata: { qrToken: scannedCode },
+    needsValidation: false,
+    requiresServerValidation: true,
+  };
 }
 
 export function handleImageMatch(matchScore, threshold, locationId) {
@@ -116,6 +123,15 @@ function getSelfieModalElements() {
   };
 }
 
+function getQrModalElements() {
+  return {
+    modal: document.getElementById('qr-modal'),
+    closeButton: document.querySelector('#qr-modal .close-btn'),
+    statusText: document.getElementById('qr-status-text'),
+    resultText: document.getElementById('qr-result'),
+  };
+}
+
 function resetSelfieFileInput() {
   const { fileInput } = getSelfieModalElements();
   if (fileInput) {
@@ -128,6 +144,21 @@ function closeSelfieModal() {
   stopCamera();
   resetSelfieFileInput();
   activeSelfieContext = null;
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function closeQrModal() {
+  const { modal, resultText, statusText } = getQrModalElements();
+  stopQRScanner('qr-video');
+  activeQrContext = null;
+  if (statusText) {
+    statusText.textContent = 'Starting back camera…';
+  }
+  if (resultText) {
+    resultText.textContent = 'Awaiting scan…';
+  }
   if (modal) {
     modal.style.display = 'none';
   }
@@ -250,9 +281,33 @@ function initializeSelfieModal() {
   selfieModalHandlersBound = true;
 }
 
+function initializeQrModal() {
+  if (qrModalHandlersBound) {
+    return;
+  }
+
+  const { modal, closeButton } = getQrModalElements();
+  if (!modal || !closeButton) {
+    return;
+  }
+
+  closeButton.addEventListener('click', () => {
+    closeQrModal();
+  });
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      closeQrModal();
+    }
+  });
+
+  qrModalHandlersBound = true;
+}
+
 // A single function to set up all validation buttons using event delegation
 export function setupValidationButtons() {
   initializeSelfieModal();
+  initializeQrModal();
 
     // The container that holds all the dynamically generated location cards
     const container = document.querySelector('#locationAccordion');
@@ -351,21 +406,45 @@ export function setupValidationButtons() {
         }
         
         // --- QR SCANNER VALIDATION ---
-        else if (button.matches('#btn-validate-qr')) {
-            const scanned = prompt('Simulate QR scan: enter code');
-            // IMPORTANT: Replace with the actual expected code for the current clue
-            const expected = 'some-expected-code';
-            const passed = validateQr(scanned, expected);
-            
-            const result = {
-                passed,
-                mode: 'qr',
-                locationId,
-                metadata: { scanned },
-                needsValidation: false,
-                reason: !passed ? 'QR mismatch' : null
-            };
-            submitLocationValidation(result, gameId);
+        else if (button.matches('.btn-validate-qr')) {
+          const { modal, statusText, resultText } = getQrModalElements();
+          if (!modal || !statusText || !resultText) {
+            showToast('QR scanner UI is unavailable on this page.', { type: 'error' });
+            return;
+          }
+
+          activeQrContext = { locationId, gameId };
+          statusText.textContent = 'Starting back camera…';
+          resultText.textContent = 'Awaiting scan…';
+          modal.style.display = 'block';
+
+          try {
+            await startQRScanner({
+              videoElementId: 'qr-video',
+              canvasElementId: 'qr-canvas',
+              onStatus: (message) => {
+                statusText.textContent = message;
+              },
+              onResult: async (scannedCode) => {
+                if (!activeQrContext) {
+                  return;
+                }
+
+                resultText.textContent = `Scanned: ${scannedCode}`;
+                const qrContext = activeQrContext;
+                closeQrModal();
+
+                const result = handleQrScan(scannedCode, qrContext.locationId);
+                await submitLocationValidation(result, qrContext.gameId);
+              },
+              onError: (err) => {
+                console.error('[validate.js] QR scanner failed:', err);
+              }
+            });
+          } catch (err) {
+            console.error('[validate.js] QR start failed:', err);
+            showToast('QR scanning failed to start: ' + err.message, { type: 'warning', duration: 5000 });
+          }
         }
         
         // --- IMAGE VALIDATION ---

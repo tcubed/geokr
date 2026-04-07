@@ -17,6 +17,7 @@ const removeOfflineBundleBtn = document.getElementById('removeOfflineBundleBtn')
 const offlinePrefetchStatus = document.getElementById('offline-prefetch-status');
 const offlinePrefetchSummary = document.getElementById('offline-prefetch-summary');
 const offlinePrefetchProgress = document.getElementById('offline-prefetch-progress');
+const accountTabButtons = Array.from(document.querySelectorAll('#accountTab [data-bs-toggle="tab"]'));
 
 const TILE_CACHE = 'tile-cache-v1';
 const IMAGE_CACHE = 'image-cache-v1';
@@ -40,6 +41,109 @@ function setPrefetchProgress(completed, total) {
 function setPrefetchBusy(isBusy) {
     if (downloadOfflineBundleBtn) downloadOfflineBundleBtn.disabled = isBusy;
     if (removeOfflineBundleBtn) removeOfflineBundleBtn.disabled = isBusy;
+}
+
+function getSelectedActiveTeamOption() {
+    return activeTeamSelect?.selectedOptions?.[0] || null;
+}
+
+function updateNavbarMeta(id, value, prefix) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (value) {
+        el.textContent = `${prefix}: ${value}`;
+        el.style.display = '';
+    } else {
+        el.textContent = '';
+        el.style.display = 'none';
+    }
+}
+
+function applyThemePreviewFromOption(option) {
+    if (!option) return;
+
+    const navbar = document.getElementById('app-navbar');
+    const brandIconImg = document.getElementById('brand-icon-img');
+    const brandCaption = document.getElementById('brand-caption');
+    const navbarColor = option.dataset.navbarColor;
+    const brandIconUrl = option.dataset.brandIconUrl;
+    const brandIconAlt = option.dataset.brandIconAlt;
+    const gameName = option.dataset.gameName;
+    const teamName = option.dataset.teamName;
+    const gameId = option.dataset.gameId;
+
+    if (navbarColor && navbar) {
+        navbar.style.setProperty('--bs-primary', navbarColor);
+    }
+
+    if (brandIconUrl && brandIconImg) {
+        brandIconImg.src = brandIconUrl;
+    }
+
+    if (brandIconAlt && brandIconImg) {
+        brandIconImg.alt = brandIconAlt;
+    }
+
+    if (brandCaption && brandIconAlt) {
+        brandCaption.textContent = brandIconAlt;
+    }
+
+    updateNavbarMeta('navbar-game-meta', gameName, 'Game');
+    updateNavbarMeta('navbar-team-meta', teamName, 'Team');
+
+    const activePrefetchGameName = document.getElementById('active-prefetch-game-name');
+    const activePrefetchTeamName = document.getElementById('active-prefetch-team-name');
+    if (activePrefetchGameName && gameName) {
+        activePrefetchGameName.textContent = gameName;
+    }
+    if (activePrefetchTeamName && teamName) {
+        activePrefetchTeamName.textContent = teamName;
+    }
+
+    if (prefetchPanel) {
+        prefetchPanel.dataset.gameId = gameId || '';
+        prefetchPanel.dataset.teamId = option.value || '';
+        prefetchPanel.dataset.gameName = gameName || '';
+        prefetchPanel.dataset.teamName = teamName || '';
+    }
+}
+
+function syncAccountTabWithHash() {
+    if (!accountTabButtons.length || !window.bootstrap?.Tab) return;
+
+    const hash = window.location.hash?.replace(/^#/, '');
+    if (!hash) return;
+
+    const matchingButton = accountTabButtons.find((button) => {
+        const target = button.getAttribute('data-bs-target') || '';
+        return target === `#${hash}`;
+    });
+
+    if (matchingButton) {
+        window.bootstrap.Tab.getOrCreateInstance(matchingButton).show();
+    }
+}
+
+function bindAccountTabHashState() {
+    if (!accountTabButtons.length) return;
+
+    accountTabButtons.forEach((button) => {
+        button.addEventListener('shown.bs.tab', (event) => {
+            const target = event.target.getAttribute('data-bs-target') || '';
+            const nextHash = target.replace(/^#/, '');
+
+            if (!nextHash || nextHash === 'profile') {
+                history.replaceState(null, '', window.location.pathname);
+                return;
+            }
+
+            history.replaceState(null, '', `#${nextHash}`);
+        });
+    });
+
+    window.addEventListener('hashchange', syncAccountTabWithHash);
+    syncAccountTabWithHash();
 }
 
 function getActivePrefetchGameId() {
@@ -185,12 +289,15 @@ async function removeOfflineBundleRecord(gameId) {
 }
 
 function shouldConfirmCellularDownload() {
+    const networkState = window.offlineSync?.getNetworkState?.({ allowCellular: false });
+    if (networkState) {
+        return Boolean(networkState.online && networkState.isMetered);
+    }
+
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     if (!connection) return false;
 
-    const type = String(connection.type || '').toLowerCase();
-    const effectiveType = String(connection.effectiveType || '').toLowerCase();
-    return connection.saveData || type === 'cellular' || /(^|[^a-z])([2345]g)([^a-z]|$)/.test(effectiveType);
+    return Boolean(connection.saveData || String(connection.type || '').toLowerCase() === 'cellular');
 }
 
 async function refreshOfflinePrefetchState() {
@@ -232,6 +339,7 @@ async function downloadOfflinePackage() {
     setPrefetchBusy(true);
     setPrefetchStatus('Fetching offline bundle…');
     setPrefetchProgress(0, 1);
+    showToast('Downloading offline bundle to this device…', { type: 'info' });
 
     let bundle = null;
     let completed = 0;
@@ -327,22 +435,24 @@ export async function switchTeam(newTeamId) {
     try {
         console.log("[switchTeam] Switching team:", newTeamId);
 
+        const selectedOption = getSelectedActiveTeamOption();
+        const selectedGameId = Number.parseInt(selectedOption?.dataset.gameId || '', 10);
+
         // 1. Optimistically update local state for immediate UI feedback
         // This is the core of the offline-first approach.
         gameState.teamId = parseInt(newTeamId, 10);
-        // Resetting game-specific state
-        //gameState.gameId = null; 
-        //gameState.locations = []; 
+        gameState.gameId = Number.isNaN(selectedGameId) ? null : selectedGameId;
+        gameState.locations = [];
         gameState.currentIndex = 0; 
         saveState();
         updateJoinGameSelects();
         if (activeTeamSelect) activeTeamSelect.value = gameState.teamId;
+        applyThemePreviewFromOption(selectedOption);
+        await refreshOfflinePrefetchState().catch(() => null);
 
-         // --- Show toast immediately ---
-        //const teamName = activeTeamSelect.selectedOptions[0]?.text || `Team ${teamId}`;
-        const teamName = activeTeamSelect?.selectedOptions[0]?.text || `Team ${newTeamId}`;
+        const teamName = selectedOption?.dataset.teamName || activeTeamSelect?.selectedOptions[0]?.text || `Team ${newTeamId}`;
 
-        showToast(`Now on ${teamName}`, { type: "info" });
+        showToast(`Switched active team to ${teamName}.`, { type: "info" });
 
         // 2. Prepare payload for server synchronization
         const payload = { team_id: newTeamId };
@@ -370,19 +480,18 @@ export async function switchTeam(newTeamId) {
             console.log("[switchTeam] Server acknowledged team switch and provided game data.");
 
             // Update local state with authoritative info from the server
-            gameState.teamId = responseData.team.id;
-            gameState.gameId = responseData.game.id;
-            gameState.locations = responseData.locations;
-            gameState.currentIndex = responseData.current_index;
+            gameState.teamId = Number.parseInt(responseData.team?.id ?? responseData.team_id ?? newTeamId, 10);
+            gameState.gameId = Number.parseInt(responseData.game?.id ?? responseData.game_id ?? selectedOption?.dataset.gameId ?? '', 10);
+            gameState.locations = [];
+            gameState.currentIndex = 0;
             saveState();
 
             updateJoinGameSelects();
             if (activeTeamSelect) activeTeamSelect.value = gameState.teamId;
+            applyThemePreviewFromOption(getSelectedActiveTeamOption());
+            await refreshOfflinePrefetchState().catch(() => null);
 
             showToast(responseData.message || "Switched teams successfully!", { type: "success" });
-
-            // Now that we have the full game data, redirect to the main game page.
-            window.location.href = '/findloc';
         }
 
     } catch (err) {
@@ -482,7 +591,7 @@ if (joinForm) {
                         // Fresh join or new team
                         showToast(data.message || 'Joined game successfully!', { type: 'success' });
                         // Redirect to main game page
-                        window.location.href = '/findloc';
+                        window.location.href = '/';
                         }
                     } else {
                         showToast(data.message || 'Failed to join game.', { type: 'danger' });
@@ -524,15 +633,17 @@ if (leaveBtn) {
 
         // showToast(data.message, { type: "success" });
 
-        gameState.teamId = null;
-        gameState.gameId = null;
-        saveState();
+                gameState.teamId = null;
+                gameState.gameId = null;
+                gameState.locations = [];
+                gameState.currentIndex = 0;
+                saveState();
 
-        updateJoinGameSelects();
-        if (activeTeamSelect) activeTeamSelect.value = '';
+                showToast(data.message || 'You have left the team.', { type: 'success' });
+                window.location.href = '/account#joingame';
 
       },
-      onQueued: () => alert("Offline: leave request queued."),
+            onQueued: () => showToast('Offline: leave request queued.', { type: 'warning' }),
       onFailure: err => console.error(err)
     });
   });
@@ -552,7 +663,7 @@ if (optionsForm) {
         document.cookie = `default_pos_mode=${defaultPos};path=/;max-age=31536000`;
         const mapperBox = document.getElementById('mapper_mode');
         if (mapperBox) document.cookie = `mapper_mode=${mapperBox.checked ? '1' : ''};path=/;max-age=31536000`;
-        window.location = '/findloc';
+        window.location = '/';
     });
 }
 
@@ -594,3 +705,6 @@ if (prefetchPanel?.dataset.gameId) {
         setPrefetchStatus('Could not load offline bundle status.', { tone: 'danger' });
     });
 }
+
+applyThemePreviewFromOption(getSelectedActiveTeamOption());
+bindAccountTabHashState();

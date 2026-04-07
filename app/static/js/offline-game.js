@@ -273,13 +273,15 @@ export async function submitLocationValidation(methodResult) {
 // console.log('[offline-game] root.gameState', root.gameState);
 // console.log('[offline-game] imported gameState', gameState);
 
-  const { passed, locationId, mode, metadata, needsValidation, photoBlob } = methodResult;
+  const { passed, locationId, mode, metadata, needsValidation, photoBlob, requiresServerValidation } = methodResult;
   if (!passed) {
     showToast(`Failed to validate via ${mode}: ${methodResult.reason}`, { type: 'error' });
     return;
   }
 
-  applyGameUpdate({ locationId, mode, optimistic: true });
+  if (!requiresServerValidation) {
+    applyGameUpdate({ locationId, mode, optimistic: true });
+  }
 
   const gameState = root.gameState;
   const gameStorage = root.gameStorage;
@@ -360,6 +362,8 @@ export async function submitLocationValidation(methodResult) {
           if (needsValidation) {
               showToast('Selfie submitted; pending official validation.', { type: 'info' });
               // No need to call applyPendingValidationUI; applyGameUpdate handles it
+        } else if (mode === 'qr') {
+          showToast('QR verified!', { type: 'success' });
           } else {
               showToast('Location confirmed!', { type: 'success' });
           }
@@ -371,7 +375,9 @@ export async function submitLocationValidation(methodResult) {
     },
     onQueued: () => {
       showToast(`Saved offline (${mode}), will sync when back online.`, { type: 'warning' });
-      applyOfflineUI(locationId);
+      if (!requiresServerValidation) {
+        applyOfflineUI(locationId);
+      }
       updatePendingBadge?.(); // refresh badge immediately on queue
       refreshSyncStatus().catch(console.error);
     },
@@ -383,7 +389,9 @@ export async function submitLocationValidation(methodResult) {
         showToast(`Sync blocked for ${mode}: ${err.message}`, { type: 'error' });
       } else {
         showToast(`Error submitting via ${mode}; queued for retry.`, { type: 'error' });
-        applyOfflineUI(locationId);
+        if (!requiresServerValidation) {
+          applyOfflineUI(locationId);
+        }
       }
       updatePendingBadge?.();
       refreshSyncStatus().catch(console.error);

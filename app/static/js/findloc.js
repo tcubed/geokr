@@ -196,7 +196,7 @@ export function renderCluesFromState() {
                    data-lat="${loc.lat}" data-lon="${loc.lon}" style="height: 200px;"></div>
             ` : ''}
 
-            <div id="validation-methods">
+            <div id="validation-methods" class="d-flex flex-column gap-2">
 
               <button class="btn btn-primary btn-validate-direct" 
                       data-location-id="${loc.id}"
@@ -204,6 +204,7 @@ export function renderCluesFromState() {
                   Mark Directly
               </button>
 
+              <div class="d-flex flex-wrap gap-2 align-items-center">
               ${window.GAME_DATA.enable_selfie ? `
                     <button id="btn-validate-selfie-${loc.id}" 
                             class="btn btn-primary btn-validate-selfie"
@@ -212,6 +213,13 @@ export function renderCluesFromState() {
                         Take Selfie
                     </button>
                 ` : ''}
+
+              ${window.GAME_DATA.enable_qr_scanner ? `
+                <button class="btn btn-primary btn-validate-qr" 
+                  data-location-id="${loc.id}">
+                Scan QR</button>
+              ` : ''}
+              </div>
 
               
               ${window.GAME_DATA.enable_geolocation ? `
@@ -234,16 +242,6 @@ export function renderCluesFromState() {
                   <br>
                   <button id="capture-btn">Verify</button>
                   <div id="status-img"></div>
-                </div>
-              ` : ''}
-              ${window.GAME_DATA.enable_qr_scanner ? `
-                <button id="btn-validate-qr" class="btn btn-primary" 
-                  data-location-id="${loc.id}">
-                Scan QR Code</button>
-                <div id="qr-container">
-                  <video id="qr-video" style="width: 100%; max-width: 400px;"></video>
-                  <canvas id="qr-canvas" style="display: none;"></canvas>
-                  <p id="qr-result">Awaiting scan...</p>
                 </div>
               ` : ''}
               

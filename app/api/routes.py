@@ -158,6 +158,11 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+def _set_game_admin_status(game, status):
+    game.set_admin_status(status)
+    flag_modified(game, 'data')
+
 @api_bp.route('/api/get_nearby_locations', methods=['POST'])
 # used to be /api/locations
 def get_nearby_locations():
@@ -420,6 +425,34 @@ def _append_admin_override_audit(team, *, location_id, game_id, reason):
     flag_modified(team, 'data')
 
 
+def _ensure_legacy_map_assignments(team, game_id):
+    if not team or team.game_id != game_id:
+        return
+
+    game = team.game
+    gametype = (game.gametype.name.lower() if game and game.gametype else None)
+    if gametype != 'map_hunt':
+        return
+
+    existing_assignments = TeamLocationAssignment.query.filter_by(
+        team_id=team.id,
+        game_id=game_id,
+    ).count()
+    if existing_assignments:
+        return
+
+    locations = Location.query.filter_by(game_id=game_id).order_by(Location.id).all()
+    for index, location in enumerate(locations):
+        db.session.add(TeamLocationAssignment(
+            team_id=team.id,
+            location_id=location.id,
+            game_id=game_id,
+            order_index=index,
+            found=False,
+        ))
+    db.session.flush()
+
+
 @api_bp.route('/api/location/<int:location_id>/found', methods=['POST'])
 @login_required
 def mark_location_found(location_id):
@@ -428,6 +461,7 @@ def mark_location_found(location_id):
     user_lat = data.get("lat")
     user_lon = data.get("lon")
     method = (data.get("method") or "direct").lower()
+    metadata = data.get('metadata') or {}
 
     # Validate input
     if not game_id:
@@ -449,11 +483,41 @@ def mark_location_found(location_id):
     ).first()
 
     if not assignment:
+        _ensure_legacy_map_assignments(membership.team, game_id)
+        assignment = TeamLocationAssignment.query.filter_by(
+            team_id=membership.team_id,
+            location_id=location_id,
+            game_id=game_id
+        ).first()
+
+    if not assignment:
         return jsonify({"error": "Location not assigned to your team"}), 404
 
     # Check if already found (idempotent behavior)
     if assignment.found:
         return jsonify(build_progress_response(assignment)), 200
+
+    if method == 'qr':
+        game = membership.team.game if membership.team else None
+        if not game or not game.qr_enabled:
+            return jsonify({"success": False, "error": "QR validation is not enabled for this game"}), 403
+
+        qr_token = metadata.get('qrToken') or metadata.get('qr_token') or data.get('qr_token')
+        if not qr_token:
+            return jsonify({"success": False, "error": "Missing QR token"}), 400
+
+        matched_location_id = game.find_location_id_for_qr_token(qr_token)
+        if matched_location_id != location_id:
+            return jsonify({"success": False, "error": "QR code does not match this clue"}), 403
+
+        expected_assignment = (
+            TeamLocationAssignment.query
+            .filter_by(team_id=membership.team_id, game_id=game_id, found=False)
+            .order_by(TeamLocationAssignment.order_index)
+            .first()
+        )
+        if expected_assignment and expected_assignment.location_id != location_id:
+            return jsonify({"success": False, "error": "QR code is valid, but not for the current clue"}), 403
 
     distance = None
 
@@ -502,6 +566,14 @@ def admin_confirm_location_found(team_id, location_id):
         location_id=location_id,
         game_id=game_id
     ).first()
+
+    if not assignment:
+        _ensure_legacy_map_assignments(Team.query.get(team_id), game_id)
+        assignment = TeamLocationAssignment.query.filter_by(
+            team_id=team_id,
+            location_id=location_id,
+            game_id=game_id
+        ).first()
 
     if not assignment:
         return jsonify({'error': 'Location not assigned to this team'}), 404
@@ -623,13 +695,17 @@ def start_game(game_id):
     try:
         # Assign new locations
         assign_locations_to_teams(game.id)
+        _set_game_admin_status(game, 'ongoing')
+        db.session.commit()
     except Exception as e:
+        db.session.rollback()
         return jsonify({"success": False, "message": f"Failed to assign locations: {str(e)}"}), 500
 
     return jsonify({
         "success": True,
         "message": f"Game '{game.name}' started and locations assigned!",
         "game_id": game.id,
+        "status": game.get_admin_status(),
         "deleted_assignments": deleted_count
     }), 200
 
@@ -638,12 +714,19 @@ def start_game(game_id):
 @admin_required
 def clear_assignments(game_id):
     try:
+        game = Game.query.get(game_id)
+        if not game:
+            return jsonify({"success": False, "message": "Game not found"}), 404
+
         # Delete all TeamLocationAssignment rows for this game
         deleted_count = TeamLocationAssignment.query.filter_by(game_id=game_id).delete()
+        _set_game_admin_status(game, 'ready')
         db.session.commit()
         return jsonify({
             "success": True,
-            "message": f"Deleted all {deleted_count} team location assignments for game {game_id}."
+            "message": f"Deleted all {deleted_count} team location assignments for game {game_id}.",
+            "game_id": game.id,
+            "status": game.get_admin_status(),
         })
     except Exception as e:
         db.session.rollback()
@@ -652,6 +735,29 @@ def clear_assignments(game_id):
             "message": f"Failed to delete team location assignments: {str(e)}"
         }), 500
     
+
+@api_bp.route('/api/game/<int:game_id>/reset_locations', methods=['POST'])
+@admin_required
+def reset_game_locations(game_id):
+    game = Game.query.get(game_id)
+    if not game:
+        return jsonify({"success": False, "message": "Game not found"}), 404
+
+    assignments = TeamLocationAssignment.query.filter_by(game_id=game.id).all()
+    for assignment in assignments:
+        assignment.found = False
+        assignment.timestamp_found = None
+
+    _set_game_admin_status(game, 'ready')
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": f"Reset {len(assignments)} location assignments for game '{game.name}'.",
+        "game_id": game.id,
+        "status": game.get_admin_status(),
+    })
+
 
 @api_bp.route('/api/team/<int:team_id>/reset_locations', methods=['POST'])
 #@login_required
@@ -674,10 +780,16 @@ def reset_locations(team_id):
     for a in assignments:
         a.found = False
         a.timestamp_found = None  # reset timestamp if you have one
+
+    if team.game:
+        _set_game_admin_status(team.game, 'ready')
     db.session.commit()
 
     return jsonify({
-        "message": f"Reset {len(assignments)} location assignments for team {team.name} (id={team.id})"
+        "success": True,
+        "message": f"Reset {len(assignments)} location assignments for team {team.name} (id={team.id})",
+        "game_id": team.game_id,
+        "status": team.game.get_admin_status() if team.game else None,
     })
 
 
@@ -963,12 +1075,14 @@ def game_route_detail(game_id, route_idx):
             return jsonify(error="All location IDs must be integers"), 400
 
         game.data['routes'] = routes
+        flag_modified(game, 'data')
         db.session.commit()
         return jsonify(success=True, route=routes[route_idx])
 
     elif request.method == 'DELETE':
         deleted_route = routes.pop(route_idx)
         game.data['routes'] = routes
+        flag_modified(game, 'data')
         db.session.commit()
         return jsonify(success=True, deleted_route=deleted_route)
 
@@ -995,6 +1109,7 @@ def add_game_route(game_id):
 
     routes.append(new_route)
     game.data['routes'] = routes
+    flag_modified(game, 'data')
     db.session.commit()
     return jsonify(success=True, route=new_route, route_index=len(routes)-1)
 

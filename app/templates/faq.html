@@ -155,6 +155,50 @@
   </div>
 </div>
 
+{% if show_mapper_faq %}
+<div class="accordion-item">
+  <h2 class="accordion-header" id="headingMapper">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMapper" aria-expanded="false" aria-controls="collapseMapper">
+      Mapper tips: adding locations to a game
+    </button>
+  </h2>
+  <div id="collapseMapper" class="accordion-collapse collapse" aria-labelledby="headingMapper" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>Quick mapper workflow:</strong>
+      <ol>
+        <li>Open your account page and turn on <b>Mapper mode</b>.</li>
+        <li>Open the target game, then go to the map or location management screen for that game.</li>
+        <li>Add a new location with a clear name, clue text, and the correct latitude/longitude.</li>
+        <li>Save the location, then assign it to the game if needed and verify the pin appears in the expected spot.</li>
+        <li>Do a quick play test so the clue text, order, and map placement all make sense for players.</li>
+      </ol>
+      <p class="mb-0">If a pin looks wrong, double-check the coordinates first, then confirm the location is attached to the correct game.</p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if show_admin_faq %}
+<div class="accordion-item">
+  <h2 class="accordion-header" id="headingAdmin">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdmin" aria-expanded="false" aria-controls="collapseAdmin">
+      Admin tools and troubleshooting
+    </button>
+  </h2>
+  <div id="collapseAdmin" class="accordion-collapse collapse" aria-labelledby="headingAdmin" data-bs-parent="#faqAccordion">
+    <div class="accordion-body">
+      <strong>Admin reminders:</strong>
+      <ul>
+        <li>Use the admin pages to create games, edit branding, and manage teams.</li>
+        <li>Use <b>Start Game</b>, <b>Clear Assignments</b>, and <b>Reset Locations</b> from game admin when preparing or resetting play.</li>
+        <li>If a player is blocked by device issues, you can use admin/debug tools to confirm progress.</li>
+        <li>For legacy games, refresh the page before testing so the latest map and sync fixes are loaded.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endif %}
+
   </div>
 </div>
 {% endblock %}

@@ -126,6 +126,47 @@ async function createMapController() {
   let userLon = null;
   let syncInProgress = false;
 
+  async function migratePendingDebugUpdates() {
+    if (!data.isAdmin || !data.debugMode || !root.offlineDB?.getAllUpdates) return;
+
+    const updates = await root.offlineDB.getAllUpdates({ ordered: true });
+    const relevantUpdates = updates.filter((update) => {
+      const matchesGame = String(update.body?.game_id ?? update.game_id) === String(data.gameId);
+      const matchesTeam = String(update.body?.team_id ?? update.team_id) === String(data.teamId);
+      const isLocationFound = update?.type === 'location_found' || /^\/api\/location\/\d+\/found$/.test(update?.url || '');
+      return matchesGame && matchesTeam && isLocationFound;
+    });
+
+    for (const update of relevantUpdates) {
+      const locationId = update.body?.location_id ?? update.location_id;
+      if (locationId == null) continue;
+
+      const migratedUpdate = {
+        ...update,
+        type: 'admin_confirm_found',
+        url: `/api/admin/team/${data.teamId}/location/${locationId}/confirm_found`,
+        queue_key: `admin_confirm:${data.gameId}:${data.teamId}:${locationId}`,
+        body: {
+          ...(update.body || {}),
+          game_id: data.gameId,
+          team_id: data.teamId,
+          location_id: locationId,
+          reason: 'debug_mode',
+          queue_key: `admin_confirm:${data.gameId}:${data.teamId}:${locationId}`,
+        },
+        game_id: data.gameId,
+        team_id: data.teamId,
+        location_id: locationId,
+      };
+
+      delete migratedUpdate.body.lat;
+      delete migratedUpdate.body.lon;
+      delete migratedUpdate.body.method;
+
+      await root.offlineDB.putUpdate(migratedUpdate);
+    }
+  }
+
   function updateHud() {
     const hudCount = document.getElementById('hud-count');
     if (!hudCount) return;
@@ -288,21 +329,35 @@ async function createMapController() {
     btn.disabled = true;
     btn.textContent = '…';
 
-    const payload = {
-      game_id: data.gameId,
-      team_id: data.teamId,
-      location_id: locId,
-      method: 'geo',
-      lat: userLat,
-      lon: userLon,
-      client_event_id: createClientEventId(),
-      client_timestamp: new Date().toISOString(),
-      queue_key: `location_found:${data.gameId}:${data.teamId}:${locId}`,
-    };
+    const canUseAdminDebugConfirm = Boolean(data.isAdmin && data.debugMode);
+
+    const payload = canUseAdminDebugConfirm
+      ? {
+          game_id: data.gameId,
+          team_id: data.teamId,
+          location_id: locId,
+          reason: 'debug_mode',
+          client_event_id: createClientEventId(),
+          client_timestamp: new Date().toISOString(),
+          queue_key: `admin_confirm:${data.gameId}:${data.teamId}:${locId}`,
+        }
+      : {
+          game_id: data.gameId,
+          team_id: data.teamId,
+          location_id: locId,
+          method: 'geo',
+          lat: userLat,
+          lon: userLon,
+          client_event_id: createClientEventId(),
+          client_timestamp: new Date().toISOString(),
+          queue_key: `location_found:${data.gameId}:${data.teamId}:${locId}`,
+        };
 
     const update = {
-      type: 'location_found',
-      url: `/api/location/${locId}/found`,
+      type: canUseAdminDebugConfirm ? 'admin_confirm_found' : 'location_found',
+      url: canUseAdminDebugConfirm
+        ? `/api/admin/team/${data.teamId}/location/${locId}/confirm_found`
+        : `/api/location/${locId}/found`,
       method: 'POST',
       body: payload,
       timestamp: Date.now(),
@@ -315,7 +370,7 @@ async function createMapController() {
     await syncApi.sendOrQueue(update, {
       onSuccess: () => {
         markSynced(locId);
-        showToast('Location confirmed!', { type: 'success' });
+        showToast(canUseAdminDebugConfirm ? 'Location confirmed in debug mode!' : 'Location confirmed!', { type: 'success' });
         refreshSyncStatus().catch(console.error);
       },
       onQueued: () => {
@@ -356,7 +411,13 @@ async function createMapController() {
   root.addEventListener('offline', () => refreshSyncStatus().catch(console.error));
 
   updateHud();
-  await refreshSyncStatus();
+  await migratePendingDebugUpdates();
+
+  if (getNetworkState().canAutoSync) {
+    await runSync({ manual: false });
+  } else {
+    await refreshSyncStatus();
+  }
 
   if (data.source === 'offline-bundle') {
     showToast('Loaded saved offline map bundle.', { type: 'info' });

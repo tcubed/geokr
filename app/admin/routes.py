@@ -212,7 +212,7 @@ def admin_api_character_detail(id):
 # LOCATION ADMIN
 # ====================================================================
 @admin_bp.route('/game_locations')
-#@requires_auth   # optionally add auth
+@admin_required
 def manage_game_locations():
     games = Game.query.order_by(Game.name).all()
     return render_template('admin/game_locations.html', games=games)
@@ -319,7 +319,7 @@ def import_locations(game_id):
 # ====================================================================
 
 @admin_bp.route('/game_routes')
-#@requires_auth   # optionally add auth
+@admin_required
 def manage_game_routes():
     games = Game.query.order_by(Game.name).all()
     return render_template('admin/game_routes.html', games=games)

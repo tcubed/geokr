@@ -3,7 +3,7 @@
 {% block title %}Map Hunt – {{ game.name if game else "Game" }}{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='libs/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/leaflet.css') }}">
 <style>
   #map-container {
     position: fixed;
@@ -181,18 +181,15 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='libs/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='libs/leaflet.js') }}"></script>
 <script id="map-play-data-json" type="application/json">
   {{ {
     'gameId': game.id,
     'teamId': team.id,
     'locations': locations,
-    'bounds': {
-      'minLat': game.min_lat,
-      'maxLat': game.max_lat,
-      'minLng': game.min_lon,
-      'maxLng': game.max_lon
-    }
+    'bounds': map_bounds,
+    'debugMode': debug_mode,
+    'isAdmin': is_admin
   } | tojson }}
 </script>
 <script type="module">
@@ -201,7 +198,9 @@ window.MAP_PLAY_DATA = mapPlayDataElement ? JSON.parse(mapPlayDataElement.textCo
   gameId: null,
   teamId: null,
   locations: [],
-  bounds: { minLat: null, maxLat: null, minLng: null, maxLng: null }
+  bounds: { minLat: null, maxLat: null, minLng: null, maxLng: null },
+  debugMode: false,
+  isAdmin: false
 };
 window.GAME_DATA = window.MAP_PLAY_DATA;
 </script>

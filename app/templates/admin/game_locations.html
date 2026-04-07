@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Manage Game Locations{% endblock %}
+{% block title %}{% if game %}Manage Locations - {{ game.name }}{% else %}Manage Game Locations{% endif %}{% endblock %}
 
 {% block head %}
 <style>
@@ -13,9 +13,29 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2>Manage Locations</h2>
+<div class="container mt-4" id="gameLocationsPage" {% if game %}data-game-id="{{ game.id }}"{% endif %}>
+  <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-3">
+    <div>
+      <h2 class="mb-1">Manage Locations{% if game %} - {{ game.name }}{% endif %}</h2>
+      {% if game %}
+      <p class="text-muted mb-0">Editing locations for this game. No separate game selection is required.</p>
+      {% else %}
+      <p class="text-muted mb-0">Select a game to load and edit its locations.</p>
+      {% endif %}
+    </div>
+    {% if game %}
+    <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+      {% if game.qr_enabled %}
+      <a class="btn btn-outline-primary" href="{{ url_for('main.game_admin_qr_labels', game_id=game.id) }}" target="_blank" rel="noopener">Print QR Codes</a>
+      {% else %}
+      <button class="btn btn-outline-primary" type="button" disabled title="Enable QR on the game edit page first">Print QR Codes</button>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.game_admin_edit', game_id=game.id) }}">Back to Edit Game</a>
+    </div>
+    {% endif %}
+  </div>
 
+  {% if not game %}
   <div class="mb-3">
     <label for="gameSelect" class="form-label">Select a game:</label>
     <select class="form-select" id="gameSelect">
@@ -25,6 +45,7 @@
       {% endfor %}
     </select>
   </div>
+  {% endif %}
 
   <div class="mb-3">
     <label for="filterInput" class="form-label">Filter locations:</label>

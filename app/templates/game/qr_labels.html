@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>QR Labels - {{ game.name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    @page {
+      size: letter;
+      margin: 0.5in 0.1875in;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      color: #111;
+      background: #fff;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+      background: #fff;
+    }
+
+    .toolbar h1 {
+      font-size: 1.1rem;
+      margin: 0;
+    }
+
+    .toolbar p {
+      margin: 0.25rem 0 0;
+      color: #555;
+      font-size: 0.9rem;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-actions a,
+    .toolbar-actions button {
+      border: 1px solid #ccc;
+      background: #fff;
+      color: #111;
+      padding: 0.55rem 0.85rem;
+      border-radius: 0.4rem;
+      font-size: 0.95rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .sheet {
+      display: grid;
+      grid-template-columns: repeat(3, 2.625in);
+      grid-template-rows: repeat(10, 1in);
+      justify-content: center;
+      gap: 0;
+      page-break-after: always;
+      break-after: page;
+      margin: 0.25in auto;
+      width: fit-content;
+    }
+
+    .sheet:last-of-type {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    .label {
+      width: 2.625in;
+      height: 1in;
+      box-sizing: border-box;
+      padding: 0.06in 0.08in;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.08in;
+      overflow: hidden;
+    }
+
+    .label img {
+      width: 0.78in;
+      height: 0.78in;
+      object-fit: contain;
+      flex: 0 0 auto;
+    }
+
+    .label-text {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.05rem;
+    }
+
+    .label-name {
+      font-size: 0.68rem;
+      font-weight: 700;
+      line-height: 1.1;
+      word-break: break-word;
+    }
+
+    .label-meta {
+      font-size: 0.52rem;
+      color: #444;
+      line-height: 1.1;
+    }
+
+    @media print {
+      .toolbar {
+        display: none;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      .sheet {
+        margin: 0 auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div>
+      <h1>QR Labels — {{ game.name }}</h1>
+      <p>3 × 10 sheet for 2⅝&quot; × 1&quot; labels such as Avery 5160 / 5960.</p>
+    </div>
+    <div class="toolbar-actions">
+      <a href="{{ url_for('main.game_admin_locations', game_id=game.id) }}">Back to Locations</a>
+      <button type="button" onclick="window.print()">Print</button>
+    </div>
+  </div>
+
+  {% for page in label_pages %}
+  <section class="sheet">
+    {% for label in page %}
+    <div class="label">
+      <img src="{{ label.image_data_uri }}" alt="QR code for {{ label.name }}">
+      <div class="label-text">
+        <div class="label-name">{{ label.name }}</div>
+        <div class="label-meta">Loc {{ label.location_id }}</div>
+      </div>
+    </div>
+    {% endfor %}
+    {% for _unused in range(30 - page|length) %}
+    <div class="label"></div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</body>
+</html>

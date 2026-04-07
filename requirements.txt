@@ -7,3 +7,4 @@ flask-migrate
 wtforms-sqlalchemy
 wtforms<3.2
 python-dotenv
+qrcode

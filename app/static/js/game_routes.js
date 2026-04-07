@@ -1,9 +1,11 @@
 import { showToast } from '/static/js/common-ui.js';
 
+const page = document.getElementById('gameRoutesPage');
 const gameSelect = document.getElementById('gameSelect');
 const routesContainer = document.getElementById('routesContainer');
 const addRouteBtn = document.getElementById('addRouteBtn');
 const saveRoutesBtn = document.getElementById('saveRoutesBtn')
+const boundGameId = page?.dataset.gameId || '';
 
 const routeTemplate = document.getElementById('routeTemplate');
 const locationTemplate = document.getElementById('locationTemplate');
@@ -11,10 +13,17 @@ const locationTemplate = document.getElementById('locationTemplate');
 let allLocations = [];  // Locations for the selected game
 let routes = [];        // In-memory routes array
 
-// ------------------ Fetch locations and routes when game is selected ------------------
-gameSelect.addEventListener('change', async () => {
-  const gameId = gameSelect.value;
-  if (!gameId) return;
+function getActiveGameId() {
+  return boundGameId || gameSelect?.value || '';
+}
+
+async function loadRoutesForGame(gameId) {
+  if (!gameId) {
+    allLocations = [];
+    routes = [];
+    renderRoutes();
+    return;
+  }
 
   try {
     const resp = await fetch(`/api/locations?game_id=${gameId}`);
@@ -29,7 +38,16 @@ gameSelect.addEventListener('change', async () => {
     console.error(err);
     showToast('Failed to load locations or routes', { type: 'danger' });
   }
-});
+}
+
+// ------------------ Fetch locations and routes when game is selected ------------------
+if (gameSelect) {
+  gameSelect.addEventListener('change', async () => {
+    const gameId = gameSelect.value;
+    if (!gameId) return;
+    await loadRoutesForGame(gameId);
+  });
+}
 
 // ------------------ Render all routes ------------------
 function renderRoutes() {
@@ -39,7 +57,7 @@ function renderRoutes() {
 
 // ------------------ Add a new route ------------------
 addRouteBtn.addEventListener('click', async () => {
-  const gameId = gameSelect.value;
+  const gameId = getActiveGameId();
   if (!gameId) return;
 
   try {
@@ -80,7 +98,7 @@ function addRouteCard(route, index) {
 
   // Remove route button
   card.querySelector('.remove-route-btn').addEventListener('click', async () => {
-    const gameId = gameSelect.value;
+    const gameId = getActiveGameId();
     if (!confirm('Are you sure you want to delete this route?')) return;
 
     try {
@@ -119,7 +137,7 @@ function addLocationSelect(container, selectedId = null, routeIndex) {
     const locItem = e.target.closest('.list-group-item');
     const locIdx = Array.from(container.children).indexOf(locItem);
 
-    const gameId = gameSelect.value;
+    const gameId = getActiveGameId();
     routes[routeIndex].splice(locIdx, 1);
 
     try {
@@ -143,7 +161,7 @@ function addLocationSelect(container, selectedId = null, routeIndex) {
     const locIdx = Array.from(container.children).indexOf(select.closest('.list-group-item'));
     routes[routeIndex][locIdx] = parseInt(select.value) || null;
 
-    const gameId = gameSelect.value;
+    const gameId = getActiveGameId();
     try {
       const resp = await fetch(`/api/game/${gameId}/route/${routeIndex}`, {
         method: 'PUT',
@@ -164,7 +182,7 @@ function addLocationSelect(container, selectedId = null, routeIndex) {
 
 // ------------------ Save all routes ------------------
 saveRoutesBtn.addEventListener('click', async () => {
-    const gameId = gameSelect.value;
+  const gameId = getActiveGameId();
     if (!gameId) {
         showToast('Please select a game first', { type: 'danger' });
         return;
@@ -212,3 +230,7 @@ saveRoutesBtn.addEventListener('click', async () => {
         showToast(`Error: ${err.message}`, { type: 'danger' });
     }
 });
+
+if (boundGameId) {
+  loadRoutesForGame(boundGameId);
+}

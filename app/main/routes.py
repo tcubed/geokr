@@ -3,9 +3,12 @@ import time
 import random
 import json
 import re
+import io
+import base64
 from datetime import datetime, timedelta
 from itertools import cycle
-from PIL import Image
+from PIL import Image, ImageOps
+import qrcode
 
 #from datetime import timedelta
 from flask import (Blueprint, render_template, redirect, request, jsonify, 
@@ -22,7 +25,7 @@ from functools import wraps
 from app.models import (db, 
                         User,Role,UserRole,
                         Team, TeamMembership,TeamLocationAssignment,
-                        Game, Location, Character, team_game,
+                        Game, GameType, Location, Character, team_game,
                         )
 
 from app.main import main_bp
@@ -94,6 +97,265 @@ def _build_selfie_filename(team_name, original_filename, fallback_slug='team'):
         
     return None
 
+
+def _normalize_game_status(value):
+    status = (value or '').strip().lower()
+    if status in {'ready', 'ongoing', 'complete'}:
+        return status
+    return None
+
+
+def _normalize_hex_color(value):
+    raw = (value or '').strip()
+    if not raw:
+        return None
+
+    if not raw.startswith('#'):
+        raw = f'#{raw}'
+
+    if re.fullmatch(r'#[0-9a-fA-F]{6}', raw):
+        return raw.lower()
+
+    return None
+
+
+def _get_game_branding(game):
+    if not game or not game.data or not isinstance(game.data, dict):
+        return {}
+    return dict(game.data.get('branding', {}) or {})
+
+
+def _build_qr_payload(token):
+    return f'geokr:qr:{token}'
+
+
+def _build_qr_code_data_uri(payload):
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=4,
+        border=1,
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+
+    image = qr.make_image(fill_color='black', back_color='white')
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('ascii')}"
+
+
+def _build_qr_label_pages(game):
+    locations = Location.query.filter_by(game_id=game.id).order_by(Location.id).all()
+    if not locations:
+        return []
+
+    _tokens, changed = game.ensure_qr_tokens([location.id for location in locations])
+    if changed:
+        db.session.add(game)
+        db.session.commit()
+
+    labels = []
+    for location in locations:
+        token = game.get_qr_token(location.id)
+        payload = _build_qr_payload(token)
+        labels.append({
+            'location_id': location.id,
+            'name': location.name or f'Location {location.id}',
+            'token': token,
+            'payload': payload,
+            'image_data_uri': _build_qr_code_data_uri(payload),
+        })
+
+    return [labels[index:index + 30] for index in range(0, len(labels), 30)]
+
+
+def _save_game_branding_image(file_storage, game_name):
+    if not file_storage or not file_storage.filename:
+        return None
+
+    original_name = secure_filename(file_storage.filename)
+    ext = os.path.splitext(original_name)[1].lower() or '.png'
+    slug = _slugify_team_name(game_name or 'game', fallback='game')
+    unique_name = f"{slug}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.getrandbits(24):06x}{ext}"
+
+    target_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'game-branding')
+    os.makedirs(target_dir, exist_ok=True)
+    target_path = os.path.join(target_dir, unique_name)
+
+    try:
+        img = Image.open(file_storage)
+        img = ImageOps.exif_transpose(img)
+        img.thumbnail((640, 640), Image.Resampling.LANCZOS)
+        img.save(target_path)
+    except Exception as exc:
+        raise ValueError(f"Failed to process branding image: {exc}") from exc
+
+    return f"images/uploads/game-branding/{unique_name}"
+
+
+def admin_page_required(f):
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            flash("You don't have permission to view that page.", "warning")
+            return redirect(url_for('main.index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+ALLOWED_GAME_TYPES = ('findloc', 'map_hunt')
+
+
+def _build_game_form_state(game=None):
+    branding = _get_game_branding(game)
+    status = game.get_admin_status() if game else None
+    gametype_name = game.gametype.name if game and game.gametype else 'findloc'
+    if gametype_name == 'navigation':
+        gametype_name = 'map_hunt'
+    if gametype_name not in ALLOWED_GAME_TYPES:
+        gametype_name = 'findloc'
+
+    return {
+        'name': game.name if game else '',
+        'description': game.description if game and game.description else '',
+        'discoverable': game.discoverable if game and game.discoverable else 'public',
+        'mode': game.mode if game and game.mode else 'open',
+        'status': status or '',
+        'gametype': gametype_name,
+        'enable_qr': game.qr_enabled if game else False,
+        'navbar_color': branding.get('navbar_color', '#0d6efd'),
+        'brand_icon_url': branding.get('icon_url', ''),
+        'brand_icon_alt': branding.get('icon_alt', (game.name if game else 'Geo Clue Game') or 'Geo Clue Game'),
+    }
+
+
+def _render_game_form(game=None, form_state=None):
+    return render_template(
+        'game/game_form.html',
+        game=game,
+        form_state=form_state or _build_game_form_state(game),
+        gametypes=(
+            GameType.query
+            .filter(GameType.name.in_(ALLOWED_GAME_TYPES))
+            .order_by(GameType.name)
+            .all()
+        ),
+        status_options=['', 'ready', 'ongoing', 'complete'],
+    )
+
+
+def _render_game_locations_page(game=None):
+    return render_template(
+        'admin/game_locations.html',
+        game=game,
+        games=Game.query.order_by(Game.name).all() if game is None else None,
+    )
+
+
+def _render_game_routes_page(game=None):
+    return render_template(
+        'admin/game_routes.html',
+        game=game,
+        games=Game.query.order_by(Game.name).all() if game is None else None,
+    )
+
+
+def _save_game_from_form(game=None):
+    form_state = {
+        'name': (request.form.get('name') or '').strip(),
+        'description': (request.form.get('description') or '').strip(),
+        'discoverable': (request.form.get('discoverable') or 'public').strip().lower(),
+        'mode': (request.form.get('mode') or 'open').strip().lower(),
+        'status': (request.form.get('status') or '').strip().lower(),
+        'gametype': (request.form.get('gametype') or '').strip(),
+        'enable_qr': request.form.get('enable_qr') == '1',
+        'navbar_color': (request.form.get('navbar_color_hex') or request.form.get('navbar_color') or '').strip(),
+        'brand_icon_url': '',
+        'brand_icon_alt': (request.form.get('brand_icon_alt') or '').strip(),
+    }
+
+    existing_branding = _get_game_branding(game)
+    if not form_state['navbar_color']:
+        form_state['navbar_color'] = existing_branding.get('navbar_color', '#0d6efd')
+    if not form_state['brand_icon_alt']:
+        form_state['brand_icon_alt'] = existing_branding.get('icon_alt', form_state['name'] or 'Geo Clue Game')
+    form_state['brand_icon_url'] = existing_branding.get('icon_url', '')
+
+    errors = []
+
+    if not form_state['name']:
+        errors.append('Game name is required.')
+
+    if form_state['discoverable'] not in {'public', 'no'}:
+        errors.append('Discoverable must be either public or no.')
+
+    if form_state['mode'] not in {'open', 'competitive'}:
+        errors.append('Mode must be either open or competitive.')
+
+    status = _normalize_game_status(form_state['status']) if form_state['status'] else None
+    if form_state['status'] and not status:
+        errors.append('Status must be empty, ready, ongoing, or complete.')
+
+    gametype = None
+    if not form_state['gametype']:
+        errors.append('Game type is required.')
+    elif form_state['gametype'] not in ALLOWED_GAME_TYPES:
+        errors.append('Game type must be either findloc or map_hunt.')
+    else:
+        gametype = GameType.query.filter_by(name=form_state['gametype']).first()
+        if not gametype:
+            errors.append('Please choose a valid game type.')
+
+    navbar_color = _normalize_hex_color(form_state['navbar_color'])
+    if form_state['navbar_color'] and not navbar_color:
+        errors.append('Background color must be a 6-digit hex value such as #0d6efd.')
+
+    uploaded_icon = None
+    file_storage = request.files.get('branding_image')
+    if file_storage and file_storage.filename:
+        try:
+            uploaded_icon = _save_game_branding_image(file_storage, form_state['name'] or (game.name if game else 'game'))
+            form_state['brand_icon_url'] = uploaded_icon
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    if errors:
+        for error in errors:
+            flash(error, 'danger')
+        return None, form_state, False
+
+    is_new = game is None
+    if is_new:
+        game = Game()
+
+    game.name = form_state['name']
+    game.description = form_state['description'] or None
+    game.discoverable = form_state['discoverable']
+    game.mode = form_state['mode']
+    game.gametype = gametype
+
+    game_data = dict(game.data or {})
+    branding = dict(game_data.get('branding', {}) or {})
+    branding['navbar_color'] = navbar_color or '#0d6efd'
+    branding['icon_alt'] = form_state['brand_icon_alt'] or game.name or 'Geo Clue Game'
+    if uploaded_icon:
+        branding['icon_url'] = uploaded_icon
+    elif branding.get('icon_url'):
+        form_state['brand_icon_url'] = branding['icon_url']
+
+    game_data['branding'] = branding
+    game.data = game_data
+    game.set_admin_status(status)
+    game.set_qr_enabled(form_state['enable_qr'])
+
+    db.session.add(game)
+    db.session.commit()
+
+    flash(f"Game '{game.name}' {'created' if is_new else 'updated' }.", 'success')
+    return game, _build_game_form_state(game), True
+
 @main_bp.route('/')
 def index():
     if not current_user.is_authenticated:
@@ -137,8 +399,22 @@ def map_page():
     )
 
     locations = []
-    for assignment in assignments:
-        loc = assignment.location
+    source_locations = []
+    if assignments:
+        for assignment in assignments:
+            source_locations.append({
+                'location': assignment.location,
+                'found': assignment.found,
+            })
+    else:
+        for loc in Location.query.filter_by(game_id=game.id).order_by(Location.id).all():
+            source_locations.append({
+                'location': loc,
+                'found': False,
+            })
+
+    for item in source_locations:
+        loc = item['location']
         img_url = url_for('static', filename=f'images/{loc.image_url}') if loc.image_url else None
         locations.append({
             'id': loc.id,
@@ -147,9 +423,38 @@ def map_page():
             'lon': float(loc.longitude) if loc.longitude is not None else None,
             'clue_text': loc.clue_text,
             'image_url': img_url,
-            'found': assignment.found,
+            'found': item['found'],
             'show_pin': loc.show_pin,  # None = use game default (show); True/False = explicit
         })
+
+    coords = [
+        (loc['lat'], loc['lon'])
+        for loc in locations
+        if loc['lat'] is not None and loc['lon'] is not None
+    ]
+    if game.min_lat is not None and game.max_lat is not None and game.min_lon is not None and game.max_lon is not None:
+        map_bounds = {
+            'minLat': game.min_lat,
+            'maxLat': game.max_lat,
+            'minLng': game.min_lon,
+            'maxLng': game.max_lon,
+        }
+    elif coords:
+        lats = [lat for lat, _lon in coords]
+        lons = [lon for _lat, lon in coords]
+        map_bounds = {
+            'minLat': min(lats),
+            'maxLat': max(lats),
+            'minLng': min(lons),
+            'maxLng': max(lons),
+        }
+    else:
+        map_bounds = {
+            'minLat': None,
+            'maxLat': None,
+            'minLng': None,
+            'maxLng': None,
+        }
 
     found_count = sum(1 for loc in locations if loc['found'])
     completion_duration = (
@@ -168,6 +473,9 @@ def map_page():
         game=game,
         team=team,
         locations=locations,
+        map_bounds=map_bounds,
+        debug_mode=request.cookies.get('debug_mode') == '1',
+        is_admin=current_user.is_admin,
         found_count=found_count,
         total_count=len(locations),
         completion_duration=format_timedelta(completion_duration) if completion_duration else None,
@@ -338,7 +646,7 @@ def findloc():
                            enable_geolocation=False,
                            enable_selfie=True,
                            enable_image_verify=False,
-                           enable_qr_scanner=False,
+                           enable_qr_scanner=game.qr_enabled,
                            #games=games,
                            #teams_by_game=teams_by_game
                            )
@@ -384,7 +692,16 @@ def offline():
 
 @main_bp.route('/faq')
 def faq():
-    return render_template('faq.html')
+    show_mapper_faq = (
+        current_user.is_authenticated
+        and (current_user.is_admin or current_user.has_role('mapper'))
+    )
+    show_admin_faq = current_user.is_authenticated and current_user.is_admin
+    return render_template(
+        'faq.html',
+        show_mapper_faq=show_mapper_faq,
+        show_admin_faq=show_admin_faq,
+    )
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, current_app
@@ -419,6 +736,9 @@ def account():
         print(f"[account, POST] update account: {time.time()-start_time:.4f}s")
         return redirect(url_for('main.account'))
 
+    active_team = get_active_team(user)
+    active_game = active_team.game if active_team else None
+
     # Build discoverable games + teams_by_game for “join game” section
     # --- Build games list (discoverable + user's current games) ---
     # 1. Discoverable public games
@@ -426,16 +746,11 @@ def account():
 
     # 2. Games where user already has a team
     user_team_ids = [m.team_id for m in user.team_memberships]
-    user_teams = Team.query.filter(Team.id.in_(user_team_ids)).all()
+    user_teams = [membership.team for membership in user.team_memberships if membership.team]
     user_games = [t.game for t in user_teams]
 
     # Check if the user is on ANY team
     has_game_and_team = bool(user_teams)
-
-    # If the user has teams, set the active_team_id in the session if it's not already there.
-    if has_game_and_team and 'active_team_id' not in session:
-        # Default to the first team in their list
-        session['active_team_id'] = user_teams[0].id
 
     # Combine and remove duplicates
     all_games_set = {g.id: g for g in discoverable_games}
@@ -461,6 +776,31 @@ def account():
     if any(role.role.name == "mapper" for role in current_user.user_roles):
         options.append("mapper")
 
+    default_brand_icon = 'icons/apple-touch-icon.png'
+    default_brand_icon_alt = 'Geo Clue Game'
+    default_navbar_color = '#0d6efd'
+
+    team_membership_views = []
+    for membership in user.team_memberships:
+        team = membership.team
+        game = team.game if team else None
+        branding = (game.data or {}).get('branding', {}) if game and game.data else {}
+        brand_icon = branding.get('icon_url', default_brand_icon)
+        brand_icon_alt = branding.get('icon_alt', default_brand_icon_alt)
+        navbar_color = branding.get('navbar_color', default_navbar_color)
+
+        team_membership_views.append({
+            'team_id': team.id if team else None,
+            'team_name': team.name if team else '',
+            'game_id': game.id if game else None,
+            'game_name': game.name if game else '',
+            'gametype': game.gametype.name.lower() if game and game.gametype else None,
+            'brand_icon': brand_icon,
+            'brand_icon_url': url_for('static', filename=brand_icon),
+            'brand_icon_alt': brand_icon_alt,
+            'navbar_color': navbar_color,
+        })
+
     print(f"[account, GET] account: {time.time()-start_time:.4f}s")
 
     current_app.logger.warning(
@@ -477,7 +817,13 @@ def account():
         debug_mode=debug_mode,
         location_mode=location_mode,
         options=options,
-        has_game_and_team=has_game_and_team 
+        has_game_and_team=has_game_and_team,
+        active_team=active_team,
+        active_game=active_game,
+        active_team_id=active_team.id if active_team else None,
+        game=active_game,
+        team=active_team,
+        team_membership_views=team_membership_views,
     )
 
 # @main_bp.route('/account_legacy', methods=['GET', 'POST'])
@@ -687,12 +1033,27 @@ def switch_team():
 
     game = membership.team.game
     gametype_name = (game.gametype.name.lower() if game and game.gametype else None)
+    branding = (game.data or {}).get('branding', {}) if game and game.data else {}
 
     return jsonify({
         "success": True,
         "team_id": team_id,
         "game_id": game.id if game else None,
         "gametype": gametype_name,
+        "team": {
+            "id": membership.team.id,
+            "name": membership.team.name,
+        },
+        "game": {
+            "id": game.id if game else None,
+            "name": game.name if game else None,
+            "gametype": gametype_name,
+        },
+        "branding": {
+            "icon_url": branding.get('icon_url', 'icons/apple-touch-icon.png'),
+            "icon_alt": branding.get('icon_alt', 'Geo Clue Game'),
+            "navbar_color": branding.get('navbar_color', '#0d6efd'),
+        },
         "message": f"Switched to team '{membership.team.name}'"
     })
 
@@ -912,13 +1273,66 @@ def get_team_locations(team_id):
 
 
 @main_bp.route('/game_admin')
-@login_required
+@admin_page_required
 def game_admin():
-    if not current_user.is_admin:
-        flash("You don't have permission to view that page.", "warning")
-        return redirect(url_for('main.index'))  # or any other page
     games = Game.query.order_by(Game.start_time.desc()).all()
     return render_template('game/game_admin.html', games=games)
+
+
+@main_bp.route('/game_admin/new', methods=['GET', 'POST'])
+@admin_page_required
+def game_admin_new():
+    if request.method == 'POST':
+        game, form_state, saved = _save_game_from_form()
+        if saved:
+            return redirect(url_for('main.game_admin_edit', game_id=game.id))
+        return _render_game_form(form_state=form_state)
+
+    return _render_game_form()
+
+
+@main_bp.route('/game_admin/<int:game_id>/edit', methods=['GET', 'POST'])
+@admin_page_required
+def game_admin_edit(game_id):
+    game = Game.query.get_or_404(game_id)
+
+    if request.method == 'POST':
+        updated_game, form_state, saved = _save_game_from_form(game)
+        if saved:
+            return redirect(url_for('main.game_admin_edit', game_id=updated_game.id))
+        return _render_game_form(game=game, form_state=form_state)
+
+    return _render_game_form(game=game)
+
+
+@main_bp.route('/game_admin/<int:game_id>/locations')
+@admin_page_required
+def game_admin_locations(game_id):
+    game = Game.query.get_or_404(game_id)
+    return _render_game_locations_page(game=game)
+
+
+@main_bp.route('/game_admin/<int:game_id>/routes')
+@admin_page_required
+def game_admin_routes(game_id):
+    game = Game.query.get_or_404(game_id)
+    return _render_game_routes_page(game=game)
+
+
+@main_bp.route('/game_admin/<int:game_id>/qr_labels')
+@admin_page_required
+def game_admin_qr_labels(game_id):
+    game = Game.query.get_or_404(game_id)
+    if not game.qr_enabled:
+        flash('Enable QR for this game before printing QR labels.', 'warning')
+        return redirect(url_for('main.game_admin_locations', game_id=game.id))
+
+    label_pages = _build_qr_label_pages(game)
+    if not label_pages:
+        flash('Add at least one location before printing QR labels.', 'warning')
+        return redirect(url_for('main.game_admin_locations', game_id=game.id))
+
+    return render_template('game/qr_labels.html', game=game, label_pages=label_pages)
 
 @main_bp.route('/game_status')
 @login_required

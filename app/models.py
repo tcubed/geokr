@@ -6,6 +6,7 @@ from sqlalchemy.ext.mutable import MutableDict
 
 from flask_login import UserMixin
 from datetime import datetime
+import secrets
 
 team_game = db.Table('team_game',
     db.Column('team_id', db.Integer, db.ForeignKey('team.id'), primary_key=True),
@@ -78,6 +79,104 @@ class Game(db.Model):
         alt = branding.get('icon_alt', default_alt)
 
         return icon, alt
+
+    def get_admin_status(self):
+        if not self.data or not isinstance(self.data, dict):
+            return None
+
+        status = (self.data.get('admin_status') or '').strip().lower()
+        if status in {'ready', 'ongoing', 'complete'}:
+            return status
+        return None
+
+    def set_admin_status(self, status):
+        normalized = (status or '').strip().lower()
+        if normalized not in {'ready', 'ongoing', 'complete'}:
+            normalized = None
+
+        data = dict(self.data or {})
+        if normalized:
+            data['admin_status'] = normalized
+        else:
+            data.pop('admin_status', None)
+
+        self.data = data
+        return normalized
+
+    def get_qr_config(self):
+        if not self.data or not isinstance(self.data, dict):
+            return {'enabled': False, 'tokens': {}}
+
+        qr = self.data.get('qr', {}) or {}
+        tokens = qr.get('tokens', {}) or {}
+        return {
+            'enabled': bool(qr.get('enabled')),
+            'tokens': {str(location_id): token for location_id, token in tokens.items() if token},
+        }
+
+    @property
+    def qr_enabled(self):
+        return self.get_qr_config().get('enabled', False)
+
+    def set_qr_enabled(self, enabled):
+        data = dict(self.data or {})
+        qr = dict(data.get('qr', {}) or {})
+        qr['enabled'] = bool(enabled)
+        qr['tokens'] = {str(location_id): token for location_id, token in (qr.get('tokens', {}) or {}).items() if token}
+        data['qr'] = qr
+        self.data = data
+        return qr['enabled']
+
+    def get_qr_token(self, location_id):
+        return self.get_qr_config().get('tokens', {}).get(str(location_id))
+
+    def set_qr_token(self, location_id, token):
+        data = dict(self.data or {})
+        qr = dict(data.get('qr', {}) or {})
+        tokens = {str(loc_id): value for loc_id, value in (qr.get('tokens', {}) or {}).items() if value}
+        tokens[str(location_id)] = token
+        qr['tokens'] = tokens
+        data['qr'] = qr
+        self.data = data
+        return token
+
+    def ensure_qr_tokens(self, location_ids, token_factory=None):
+        data = dict(self.data or {})
+        qr = dict(data.get('qr', {}) or {})
+        tokens = {str(loc_id): value for loc_id, value in (qr.get('tokens', {}) or {}).items() if value}
+        changed = False
+        token_factory = token_factory or (lambda: secrets.token_urlsafe(12))
+
+        for location_id in location_ids:
+            key = str(location_id)
+            if not tokens.get(key):
+                tokens[key] = token_factory()
+                changed = True
+
+        qr['tokens'] = tokens
+        qr['enabled'] = bool(qr.get('enabled'))
+        data['qr'] = qr
+
+        if changed or self.data != data:
+            self.data = data
+
+        return tokens, changed
+
+    def find_location_id_for_qr_token(self, token):
+        raw = (token or '').strip()
+        if not raw:
+            return None
+
+        if raw.startswith('geokr:qr:'):
+            raw = raw.split('geokr:qr:', 1)[1].strip()
+
+        for location_id, location_token in self.get_qr_config().get('tokens', {}).items():
+            if raw == location_token:
+                try:
+                    return int(location_id)
+                except (TypeError, ValueError):
+                    return None
+        return None
 
 class GameType(db.Model):
     id = db.Column(db.Integer, primary_key=True)

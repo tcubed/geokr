@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{% if game %}Edit Game{% else %}New Game{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+  <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+    <div>
+      <h2 class="mb-1">{% if game %}Edit Game{% else %}New Game{% endif %}</h2>
+      <p class="text-muted mb-0">Configure gameplay mode, visibility, branding, and operator-facing status.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if game %}
+      <a class="btn btn-outline-primary" href="{{ url_for('main.game_admin_locations', game_id=game.id) }}">Manage Locations</a>
+      <a class="btn btn-outline-primary" href="{{ url_for('main.game_admin_routes', game_id=game.id) }}">Manage Routes</a>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.game_admin') }}">Back to Game Admin</a>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="row g-4">
+    <div class="col-lg-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h3 class="h5 mb-3">Game Settings</h3>
+
+          <div class="mb-3">
+            <label class="form-label" for="name">Game name</label>
+            <input class="form-control" id="name" name="name" value="{{ form_state.name }}" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="description">Description</label>
+            <textarea class="form-control" id="description" name="description" rows="4">{{ form_state.description }}</textarea>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label d-block">Discoverable</label>
+              <div class="btn-group w-100" role="group" aria-label="Discoverable setting">
+                <input type="radio" class="btn-check" name="discoverable" id="discoverable_public" value="public" {% if form_state.discoverable != 'no' %}checked{% endif %}>
+                <label class="btn btn-outline-primary" for="discoverable_public">Public</label>
+
+                <input type="radio" class="btn-check" name="discoverable" id="discoverable_no" value="no" {% if form_state.discoverable == 'no' %}checked{% endif %}>
+                <label class="btn btn-outline-primary" for="discoverable_no">No</label>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label d-block">Mode</label>
+              <div class="btn-group w-100" role="group" aria-label="Game mode">
+                <input type="radio" class="btn-check" name="mode" id="mode_open" value="open" {% if form_state.mode != 'competitive' %}checked{% endif %}>
+                <label class="btn btn-outline-primary" for="mode_open">Open</label>
+
+                <input type="radio" class="btn-check" name="mode" id="mode_competitive" value="competitive" {% if form_state.mode == 'competitive' %}checked{% endif %}>
+                <label class="btn btn-outline-primary" for="mode_competitive">Competitive</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-md-6">
+              <label class="form-label" for="status">Status</label>
+              <select class="form-select" id="status" name="status">
+                {% for option in status_options %}
+                <option value="{{ option }}" {% if form_state.status == option %}selected{% endif %}>
+                  {% if option %}{{ option|capitalize }}{% else %}-- empty --{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">This can be adjusted here and is also updated automatically by Start Game, Clear Assignments, and Reset Locations.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="gametype">Game type</label>
+              <select class="form-select" id="gametype" name="gametype" required>
+                <option value="" {% if not form_state.gametype %}selected{% endif %} disabled>Select a game type</option>
+                {% for gametype in gametypes %}
+                <option value="{{ gametype.name }}" {% if form_state.gametype == gametype.name %}selected{% endif %}>
+                  {% if gametype.name == 'map_hunt' %}Map Hunt{% else %}{{ gametype.name }}{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-check form-switch mt-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="enable_qr" name="enable_qr" value="1" {% if form_state.enable_qr %}checked{% endif %}>
+            <label class="form-check-label" for="enable_qr">Enable QR</label>
+            <div class="form-text">When enabled, findloc players can use QR scanning as an optional fallback and admins can print QR labels from the game locations page.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h3 class="h5 mb-3">Branding</h3>
+
+          <div class="mb-3">
+            <label class="form-label" for="branding_image">Branding image</label>
+            <input class="form-control" type="file" id="branding_image" name="branding_image" accept="image/*">
+            <div class="form-text">Upload a square-ish logo or icon for the navbar brand area.</div>
+          </div>
+
+          {% if form_state.brand_icon_url %}
+          <div class="mb-3">
+            <div class="small text-muted mb-2">Current branding image</div>
+            <div class="d-flex align-items-center gap-3">
+              <img src="{{ url_for('static', filename=form_state.brand_icon_url) }}" alt="{{ form_state.brand_icon_alt or 'Game branding image' }}" style="width: 64px; height: 64px; object-fit: contain; border: 1px solid #dee2e6; border-radius: 0.5rem; padding: 0.25rem; background: #fff;">
+              <div class="small text-muted">{{ form_state.brand_icon_url }}</div>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="row g-3 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label" for="navbar_color">Background color</label>
+              <input class="form-control form-control-color w-100" type="color" id="navbar_color" name="navbar_color" value="{{ form_state.navbar_color or '#0d6efd' }}" title="Choose navbar color">
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label" for="navbar_color_hex">Hex value</label>
+              <input class="form-control" id="navbar_color_hex" name="navbar_color_hex" value="{{ form_state.navbar_color or '#0d6efd' }}" placeholder="#0d6efd">
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label" for="brand_icon_alt">Brand image alt text</label>
+            <input class="form-control" id="brand_icon_alt" name="brand_icon_alt" value="{{ form_state.brand_icon_alt }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h3 class="h6 mb-2">Save</h3>
+          <p class="text-muted small mb-3">Save now and return later to manage teams and live play actions from the admin list. Existing games can manage locations directly from this page.</p>
+          <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+            <a class="btn btn-outline-secondary" href="{{ url_for('main.game_admin') }}">Cancel</a>
+            <button class="btn btn-primary" type="submit">{% if game %}Save Changes{% else %}Create Game{% endif %}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script type="module" src="{{ url_for('static', filename='js/game_form.js') }}"></script>
+{% endblock %}

@@ -40,6 +40,10 @@
     return Object.fromEntries(body.entries());
   }
 
+  function hasPersistedUpdateId(update) {
+    return update?.id !== undefined && update?.id !== null;
+  }
+
   function buildFetchOptions(update) {
     if (update.body?.__multipart) {
       const formData = new FormData();
@@ -123,13 +127,16 @@
       last_error: null,
     };
 
-    if (typeof db.putUpdate === 'function') {
+    if (!hasPersistedUpdateId(queuedUpdate)) {
+      delete queuedUpdate.id;
+    }
+
+    if (hasPersistedUpdateId(queuedUpdate) && typeof db.putUpdate === 'function') {
       queuedUpdate.id = await db.putUpdate(queuedUpdate);
-    } else if (!queuedUpdate.id) {
+    } else if (typeof db.addUpdate === 'function') {
       queuedUpdate.id = await db.addUpdate(queuedUpdate);
     } else {
-      await db.deleteUpdate(queuedUpdate.id);
-      queuedUpdate.id = await db.addUpdate(queuedUpdate);
+      queuedUpdate.id = await db.putUpdate(queuedUpdate);
     }
 
     return queuedUpdate;
@@ -157,7 +164,9 @@
     const type = String(connection?.type || '').toLowerCase();
     const effectiveType = String(connection?.effectiveType || '').toLowerCase();
     const saveData = Boolean(connection?.saveData);
-    const isMetered = saveData || type === 'cellular' || /(^|[^a-z])([2345]g)([^a-z]|$)/.test(effectiveType);
+    const mobileHint = Boolean(root.navigator?.userAgent && /android|iphone|ipad|ipod/i.test(root.navigator.userAgent));
+    const slowMobileConnection = !type && mobileHint && /(^|[^a-z])(slow-2g|2g|3g)([^a-z]|$)/.test(effectiveType);
+    const isMetered = saveData || type === 'cellular' || slowMobileConnection;
     const waitingForWifi = Boolean(online && isMetered && !allowCellular);
 
     return {
@@ -259,8 +268,12 @@
         if (err?.shouldDelete && update.id != null) {
           await db.deleteUpdate(update.id);
           queuedUpdate = null;
-        } else if (err?.isPermanent && update.id != null) {
-          queuedUpdate = await markQueuedFailure(update, db, err);
+        } else if (err?.isPermanent) {
+          if (update.id != null) {
+            queuedUpdate = await markQueuedFailure(update, db, err);
+          } else {
+            queuedUpdate = null;
+          }
         } else {
           queuedUpdate = await doQueue();
         }

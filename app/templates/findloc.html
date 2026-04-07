@@ -111,6 +111,64 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
   overflow: hidden;
 }
 
+#qr-modal {
+    display: none;
+    position: fixed;
+    z-index: 1050;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.92);
+}
+
+#qr-modal .modal-content {
+    background-color: #000;
+    color: #fff;
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+    border: none;
+    width: min(100%, 640px);
+    min-height: 100vh;
+    max-height: 100vh;
+    position: relative;
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+}
+
+#qr-modal .close-btn {
+    color: #f1f1f1;
+    font-size: 2rem;
+    font-weight: bold;
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: 16px;
+}
+
+.qr-camera-shell {
+  border-radius: 18px;
+  overflow: hidden;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#qr-video {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  background: #111;
+}
+
+.qr-status {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 /* Style the close button */
 #selfie-modal .close-btn {
     color: #f1f1f1;
@@ -462,18 +520,15 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
           </div>
           {% endif %}
 
-          {% if enable_qr_scanner %}
-          <button id="btn-validate-qr" class="btn btn-primary mt-2">Scan QR Code</button>
-          <div id="qr-container">
-            <video id="qr-video" style="width: 100%; max-width: 400px;"></video>
-            <canvas id="qr-canvas" style="display: none;"></canvas>
-            <p id="qr-result">Awaiting scan...</p>
-          </div>
-          {% endif %}
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            {% if enable_qr_scanner %}
+            <button id="btn-validate-qr" class="btn btn-primary">Scan QR</button>
+            {% endif %}
 
-          {% if enable_selfie %}
-          <button id="btn-validate-selfie" class="btn btn-primary mt-2">Take Selfie</button>
-          {% endif %}
+            {% if enable_selfie %}
+            <button id="btn-validate-selfie" class="btn btn-primary">Take Selfie</button>
+            {% endif %}
+          </div>
         </div>
         
       </div>
@@ -531,6 +586,22 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
       <p class="selfie-help">If the live camera is blurry or unavailable, use alternate capture or ask the organizer.</p>
         </div>
         <img id="selfie-preview" class="d-none" alt="Selfie Preview">
+    </div>
+</div>
+
+<div id="qr-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <div class="selfie-header">
+          <p class="selfie-title">Scan QR</p>
+          <div id="qr-status-text" class="selfie-status">Starting back camera…</div>
+          <div class="selfie-status-note">Point the rear camera at the clue QR label and hold steady.</div>
+        </div>
+        <div class="qr-camera-shell">
+          <video id="qr-video" autoplay playsinline muted></video>
+        </div>
+        <canvas id="qr-canvas" style="display: none;"></canvas>
+        <p id="qr-result" class="qr-status mb-0">Awaiting scan…</p>
     </div>
 </div>
 
@@ -606,10 +677,6 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
 
 <script type="module" src="{{ url_for('static', filename='js/offline-game.js') }}?v={{ version }}"></script>
 <script type="module" src="{{ url_for('static', filename='js/app-init.js') }}?v={{ version }}"></script>
-<script type="module">
-    import { initQRScannerIfPresent } from "{{ url_for('static', filename='js/qr.js') }}";
-    initQRScannerIfPresent();
-</script>
 
 <script>
   // PREFETCH LOGIC
