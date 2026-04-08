@@ -103,6 +103,10 @@ function renderLocations(locs, filterText = '') {
               ${availableImages.map(img => `<option value="${img}">${img}</option>`).join('')}
             </select>
           </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input new-loc-show-pin" type="checkbox" id="newLocShowPin" checked>
+            <label class="form-check-label" for="newLocShowPin">Show pin</label>
+          </div>
           <div class="mt-auto d-flex justify-content-end">
             <button type="button" class="btn btn-sm btn-secondary upload-img-btn">Upload Image</button>
             <button class="btn btn-sm btn-primary add-loc">Add</button>
@@ -128,6 +132,10 @@ function renderLocations(locs, filterText = '') {
     col.innerHTML = `
       <div class="card h-100 p-2" data-loc-id="${loc.id}">
         <div class="card-body d-flex flex-column">
+          <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+            <div class="small text-muted">Loc ${loc.id}</div>
+            ${loc.has_geofence ? '<span class="badge text-bg-info">Geofence set</span>' : '<span class="badge text-bg-light border">No geofence</span>'}
+          </div>
           <input type="text" class="form-control mb-2 loc-name" value="${loc.name}">
           <textarea class="form-control mb-2 clue-text" rows="3">${loc.clue_text || ''}</textarea>
           
@@ -150,10 +158,17 @@ function renderLocations(locs, filterText = '') {
                 }).join('')}
             </select>
           </div>
-          <div class="mt-auto d-flex justify-content-between align-items-center">
+          <div class="form-check mb-3">
+            <input class="form-check-input loc-show-pin" type="checkbox" id="locShowPin-${loc.id}" ${loc.show_pin === false ? '' : 'checked'}>
+            <label class="form-check-label" for="locShowPin-${loc.id}">Show pin</label>
+          </div>
+          <div class="mt-auto d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 ${loc.image_url ? `<img src="/static/images/${loc.image_url}" class="img-thumbnail" style="width:150px;height:150px;object-fit:cover;">` : '<div></div>'}
-                <button class="btn btn-sm btn-success save-loc">Save</button>
-                <button class="btn btn-sm btn-danger delete-loc">Delete</button>
+                <div class="d-flex flex-wrap gap-2 justify-content-end ms-auto">
+                  <a class="btn btn-sm btn-outline-primary geofence-link" href="/game_admin/${getActiveGameId()}/locations/${loc.id}/geofence">${loc.has_geofence ? 'Edit Geofence' : 'Add Geofence'}</a>
+                  <button class="btn btn-sm btn-success save-loc">Save</button>
+                  <button class="btn btn-sm btn-danger delete-loc">Delete</button>
+                </div>
           </div>
         </div>
       </div>
@@ -179,6 +194,7 @@ container.addEventListener('click', async (e) => {
         const lonRaw = card.querySelector('.loc-lon').value;
         const latitude = latRaw === '' ? null : Number(latRaw);
         const longitude = lonRaw === '' ? null : Number(lonRaw);
+        const showPin = card.querySelector('.loc-show-pin').checked;
 
         // Strip the prefix before sending to the server
         if (image.startsWith('/static/images/')) {
@@ -192,7 +208,8 @@ container.addEventListener('click', async (e) => {
                 clue_text: text, 
                 image, 
                 latitude, 
-                longitude  })
+              longitude,
+              show_pin: showPin })
         });
 
         if (!resp.ok) throw new Error('Server error');
@@ -225,6 +242,7 @@ container.addEventListener('click', async (e) => {
       const lonRaw = card.querySelector('.new-loc-lon').value;
       const latitude = latRaw === '' ? null : Number(latRaw);
       const longitude = lonRaw === '' ? null : Number(lonRaw);
+      const showPin = card.querySelector('.new-loc-show-pin').checked;
 
       const gameId = getActiveGameId();
 
@@ -239,7 +257,8 @@ container.addEventListener('click', async (e) => {
                     clue_text: text, 
                     image, 
                     latitude, 
-                    longitude 
+                    longitude,
+                    show_pin: showPin
                 })
       });
 

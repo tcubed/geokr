@@ -97,6 +97,10 @@ export async function applyFindlocOfflineBundle({ gameId, teamId, liveFlags = {}
     locations: state.locations,
     currentIndex: state.currentIndex,
     bounds,
+    geofence_settings: state.bundle?.game?.geofence_settings || root.GAME_DATA?.geofence_settings || {},
+    geofences: state.bundle?.game?.geofences || root.GAME_DATA?.geofences || {},
+    team_geofence_state: state.bundle?.team?.geofence_state || root.GAME_DATA?.team_geofence_state || {},
+    team_geofence_runtime: state.bundle?.team?.geofence_runtime || root.GAME_DATA?.team_geofence_runtime || {},
     offlineSource: state.source,
   };
 

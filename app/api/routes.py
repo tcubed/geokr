@@ -116,6 +116,8 @@ def _build_offline_bundle(game, team):
                 'max_lon': game.max_lon,
             },
             'branding': branding,
+            'geofence_settings': game.get_geofence_settings(),
+            'geofences': game.get_geofence_config().get('locations', {}),
         },
         'team': {
             'id': team.id,
@@ -126,6 +128,8 @@ def _build_offline_bundle(game, team):
                 'found': found_count,
                 'total': len(locations),
             },
+            'geofence_state': team.get_geofence_state(),
+            'geofence_runtime': team.get_geofence_runtime_state(),
         },
         'locations': locations,
         'characters': characters,
@@ -142,6 +146,10 @@ def to_float_or_none(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_tracking_payload(value):
+    return dict(value or {}) if isinstance(value, dict) else {}
 
 
 def admin_required(f):
@@ -927,6 +935,38 @@ def api_game_status():
     return jsonify(games_with_data)
 
 
+@api_bp.route('/api/team/<int:team_id>/geofence_state', methods=['GET', 'POST'])
+@login_required
+def api_team_geofence_state(team_id):
+    team = Team.query.get_or_404(team_id)
+    membership = TeamMembership.query.filter_by(user_id=current_user.id, team_id=team_id).first()
+    if not membership and not getattr(current_user, 'is_admin', False):
+        return jsonify({'success': False, 'message': 'Forbidden'}), 403
+
+    if request.method == 'GET':
+        return jsonify({
+            'success': True,
+            'team_id': team.id,
+            'geofence_state': team.get_geofence_state(),
+            'geofence_runtime': team.get_geofence_runtime_state(),
+        })
+
+    payload = request.get_json(silent=True) or {}
+    team.set_geofence_tracking(
+        geofence_state=_normalize_tracking_payload(payload.get('geofence_state')),
+        geofence_runtime=_normalize_tracking_payload(payload.get('geofence_runtime')),
+    )
+    db.session.add(team)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'team_id': team.id,
+        'geofence_state': team.get_geofence_state(),
+        'geofence_runtime': team.get_geofence_runtime_state(),
+    })
+
+
 # ====================================================================
 # LOCATION ADMIN
 # ====================================================================
@@ -939,7 +979,9 @@ def get_game_locations():
     if not game_id:
         return jsonify([])
 
+    game = Game.query.get(game_id)
     locations = Location.query.filter_by(game_id=game_id).all()
+    geofence_map = game.get_geofence_config().get('locations', {}) if game else {}
     return jsonify([
         {
             "id": loc.id,
@@ -948,6 +990,8 @@ def get_game_locations():
             "image_url": loc.image_url,
             "latitude": loc.latitude,
             "longitude": loc.longitude,
+            "show_pin": loc.show_pin,
+            "has_geofence": bool(geofence_map.get(str(loc.id))),
         } for loc in locations
     ])
 
@@ -961,6 +1005,7 @@ def location_detail(loc_id):
     loc = Location.query.get_or_404(loc_id)
 
     if request.method == 'GET':
+        geofence_map = loc.game.get_geofence_config().get('locations', {}) if loc.game else {}
         return jsonify({
             "id": loc.id,
             "name": loc.name,
@@ -968,6 +1013,8 @@ def location_detail(loc_id):
             "image_url": loc.image_url,
             "latitude": loc.latitude,
             "longitude": loc.longitude,
+            "show_pin": loc.show_pin,
+            "has_geofence": bool(geofence_map.get(str(loc.id))),
         })
 
     elif request.method == 'PUT':
@@ -981,6 +1028,9 @@ def location_detail(loc_id):
         if "longitude" in data:
             loc.longitude = to_float_or_none(data.get("longitude"))
 
+        if "show_pin" in data:
+            loc.show_pin = bool(data.get("show_pin"))
+
         db.session.commit()
         return jsonify({"success": True, "message": "Location updated", "location": {
             "id": loc.id,
@@ -989,6 +1039,8 @@ def location_detail(loc_id):
             "image_url": loc.image_url,
             "latitude": loc.latitude,
             "longitude": loc.longitude,
+            "show_pin": loc.show_pin,
+            "has_geofence": bool(loc.game and loc.game.get_location_geofences(loc.id)),
         }})
 
     elif request.method == 'DELETE':
@@ -1015,6 +1067,7 @@ def add_location():
         image_url=data.get("image", ""),
         latitude=to_float_or_none(data.get("latitude")),
         longitude=to_float_or_none(data.get("longitude")),
+        show_pin=bool(data.get("show_pin", True)),
     )
     db.session.add(new_loc)
     db.session.commit()
@@ -1025,6 +1078,8 @@ def add_location():
         "image_url": new_loc.image_url,
         "latitude": new_loc.latitude,
         "longitude": new_loc.longitude,
+        "show_pin": new_loc.show_pin,
+        "has_geofence": False,
     }})
 
 # ====================================================================

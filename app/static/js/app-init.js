@@ -1,8 +1,9 @@
 // static/js/app-init.js
 import { showToast } from './common-ui.js';
-import { initGame, updateClueVisibility,renderCluesFromState, updatePendingBadge } from './findloc.js';
+import { initGame, getGameState, updateClueVisibility,renderCluesFromState, updatePendingBadge } from './findloc.js';
 import { setupValidationButtons } from './validate.js';
 import { applyFindlocOfflineBundle } from './offline-play.js';
+import { initializeGeofences } from './geofences.js';
 import { waitForSelector, watchContainer, sleep } from './utils.js';
 //import { syncWithServer } from './offline-sync.js'; // Import the sync function
 
@@ -52,6 +53,10 @@ export async function startApp() {
     // 3. Set up the single, delegated event listener for all validation buttons.
     // This is the CRUCIAL part. This must only be called ONCE.
     setupValidationButtons();
+    initializeGeofences({
+      getGameState,
+      onStateChange: () => renderCluesFromState(),
+    });
 
     // 4. Handle offline updates and sync logic
     // This part should not call setupValidationButtons again.

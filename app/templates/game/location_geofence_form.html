@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Geofence - {{ location.name }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  .geofence-preview-map {
+    height: 320px;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid #dee2e6;
+    background: #f8f9fa;
+  }
+
+  .geofence-preview-note {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+  <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+    <div>
+      <h2 class="mb-1">Edit Geofence</h2>
+      <p class="text-muted mb-0">Configure circle-based enter and exit messages for {{ location.name }}.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('main.game_admin_locations', game_id=game.id) }}">Back to Manage Locations</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.game_admin_edit', game_id=game.id) }}">Back to Edit Game</a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <form method="post" class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+            <div>
+              <h3 class="h5 mb-1">{{ location.name }}</h3>
+              <p class="text-muted mb-0">Use the location coordinates as a starting point, then override the center if needed.</p>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="enabled" name="enabled" value="1" {% if form_state.enabled %}checked{% endif %}>
+              <label class="form-check-label" for="enabled">Enable geofence</label>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label" for="center_lat">Center latitude</label>
+              <input class="form-control" id="center_lat" name="center_lat" value="{{ form_state.center_lat }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="center_lon">Center longitude</label>
+              <input class="form-control" id="center_lon" name="center_lon" value="{{ form_state.center_lon }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="radius_m">Radius (meters)</label>
+              <input class="form-control" id="radius_m" name="radius_m" type="number" min="1" step="1" value="{{ form_state.radius_m }}" required>
+            </div>
+          </div>
+
+          <div class="card border-0 bg-light mb-4">
+            <div class="card-body">
+              <h4 class="h6">Enter message</h4>
+              <p class="text-muted small">Shown when the player enters the circle. Repeats while still inside.</p>
+              <div class="mb-3">
+                <label class="form-label" for="enter_message">Message</label>
+                <textarea class="form-control" id="enter_message" name="enter_message" rows="3" placeholder="You are getting close.">{{ form_state.enter_message }}</textarea>
+              </div>
+              <div>
+                <label class="form-label" for="enter_repeat_every_s">Repeat every (seconds)</label>
+                <input class="form-control" id="enter_repeat_every_s" name="enter_repeat_every_s" type="number" min="1" step="1" value="{{ form_state.enter_repeat_every_s }}">
+              </div>
+            </div>
+          </div>
+
+          <div class="card border-0 bg-light mb-4">
+            <div class="card-body">
+              <h4 class="h6">Exit message</h4>
+              <p class="text-muted small">Shown when the player leaves the circle. Repeats while still outside.</p>
+              <div class="mb-3">
+                <label class="form-label" for="exit_message">Message</label>
+                <textarea class="form-control" id="exit_message" name="exit_message" rows="3" placeholder="You are leaving the search area.">{{ form_state.exit_message }}</textarea>
+              </div>
+              <div>
+                <label class="form-label" for="exit_repeat_every_s">Repeat every (seconds)</label>
+                <input class="form-control" id="exit_repeat_every_s" name="exit_repeat_every_s" type="number" min="1" step="1" value="{{ form_state.exit_repeat_every_s }}">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" id="once_per_team" name="once_per_team" value="1" {% if form_state.once_per_team %}checked{% endif %}>
+            <label class="form-check-label" for="once_per_team">Only fire once per team</label>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a class="btn btn-outline-secondary" href="{{ url_for('main.game_admin_locations', game_id=game.id) }}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Geofence</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h3 class="h6 mb-3">Location reference</h3>
+          <dl class="row small mb-0">
+            <dt class="col-sm-5">Name</dt>
+            <dd class="col-sm-7">{{ location.name }}</dd>
+            <dt class="col-sm-5">Latitude</dt>
+            <dd class="col-sm-7">{{ location.latitude if location.latitude is not none else '—' }}</dd>
+            <dt class="col-sm-5">Longitude</dt>
+            <dd class="col-sm-7">{{ location.longitude if location.longitude is not none else '—' }}</dd>
+            <dt class="col-sm-5">Show pin</dt>
+            <dd class="col-sm-7">{% if location.show_pin is sameas false %}No{% else %}Yes{% endif %}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mt-4">
+        <div class="card-body">
+          <h3 class="h6 mb-3">Mini map preview</h3>
+          <div id="geofence-preview-map" class="geofence-preview-map"></div>
+          <p class="geofence-preview-note mt-3 mb-0">The preview updates as you change the center or radius. It shows the location pin and the current geofence circle.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const mapEl = document.getElementById('geofence-preview-map');
+    const latInput = document.getElementById('center_lat');
+    const lonInput = document.getElementById('center_lon');
+    const radiusInput = document.getElementById('radius_m');
+
+    if (!mapEl || !latInput || !lonInput || !radiusInput || typeof L === 'undefined') {
+      return;
+    }
+
+    const fallbackLat = {{ location.latitude if location.latitude is not none else 'null' }};
+    const fallbackLon = {{ location.longitude if location.longitude is not none else 'null' }};
+    const initialLat = parseFloat(latInput.value || fallbackLat || 0);
+    const initialLon = parseFloat(lonInput.value || fallbackLon || 0);
+    const hasInitialCoords = Number.isFinite(initialLat) && Number.isFinite(initialLon);
+
+    const map = L.map(mapEl, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+    }).setView(hasInitialCoords ? [initialLat, initialLon] : [44.5, -88.5], hasInitialCoords ? 17 : 4);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const locationMarker = (fallbackLat !== null && fallbackLon !== null)
+      ? L.marker([fallbackLat, fallbackLon]).addTo(map).bindPopup('Location coordinates')
+      : null;
+
+    let fenceMarker = null;
+    let fenceCircle = null;
+
+    function updatePreview() {
+      const lat = parseFloat(latInput.value);
+      const lon = parseFloat(lonInput.value);
+      const radius = parseFloat(radiusInput.value);
+
+      const validCoords = Number.isFinite(lat) && Number.isFinite(lon);
+      if (!validCoords) {
+        return;
+      }
+
+      if (!fenceMarker) {
+        fenceMarker = L.marker([lat, lon], { opacity: 0.9 }).addTo(map).bindPopup('Geofence center');
+      } else {
+        fenceMarker.setLatLng([lat, lon]);
+      }
+
+      if (fenceCircle) {
+        fenceCircle.remove();
+      }
+
+      if (Number.isFinite(radius) && radius > 0) {
+        fenceCircle = L.circle([lat, lon], {
+          radius,
+          color: '#0d6efd',
+          fillColor: '#0d6efd',
+          fillOpacity: 0.14,
+        }).addTo(map);
+        map.fitBounds(fenceCircle.getBounds().pad(0.2));
+      } else {
+        map.setView([lat, lon], 17);
+      }
+    }
+
+    [latInput, lonInput, radiusInput].forEach((input) => {
+      input.addEventListener('input', updatePreview);
+      input.addEventListener('change', updatePreview);
+    });
+
+    updatePreview();
+    window.setTimeout(() => map.invalidateSize(), 0);
+  });
+</script>
+{% endblock %}

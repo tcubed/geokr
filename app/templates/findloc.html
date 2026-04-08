@@ -628,6 +628,10 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     'enable_selfie': enable_selfie,
     'enable_image_verify': enable_image_verify,
     'enable_qr_scanner': enable_qr_scanner,
+    'geofence_settings': geofence_settings|default({}),
+    'geofences': geofences|default({}),
+    'team_geofence_state': team_geofence_state|default({}),
+    'team_geofence_runtime': team_geofence_runtime|default({}),
     'bounds': [
       game.min_lat if game is defined else 0,
       game.min_lon if game is defined else 0,
@@ -654,6 +658,10 @@ Geokr{% if game and game.name %} - {{ game.name }}{% endif %}
     enable_selfie: false,
     enable_image_verify: false,
     enable_qr_scanner: false,
+    geofence_settings: {},
+    geofences: {},
+    team_geofence_state: {},
+    team_geofence_runtime: {},
     bounds: [0, 0, 0, 0]
   };
   //console.log('pages GAME_DATA:',window.GAME_DATA)

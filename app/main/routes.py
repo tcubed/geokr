@@ -262,6 +262,150 @@ def _render_game_routes_page(game=None):
     )
 
 
+def _build_location_geofence_form_state(game, location):
+    fences = game.get_location_geofences(location.id)
+    enter_fence = next((fence for fence in fences if fence.get('trigger') == 'enter'), None)
+    exit_fence = next((fence for fence in fences if fence.get('trigger') == 'exit'), None)
+    primary_fence = enter_fence or exit_fence
+
+    settings = game.get_geofence_settings()
+    center = dict((primary_fence or {}).get('center', {}) or {})
+
+    return {
+        'enabled': bool(fences),
+        'center_lat': center.get('lat', location.latitude if location.latitude is not None else ''),
+        'center_lon': center.get('lon', location.longitude if location.longitude is not None else ''),
+        'radius_m': (primary_fence or {}).get('radius_m', 75),
+        'enter_message': (enter_fence or {}).get('message', ''),
+        'enter_repeat_every_s': (enter_fence or {}).get('repeat_every_s', settings.get('default_repeat_every_s', 180)),
+        'exit_message': (exit_fence or {}).get('message', ''),
+        'exit_repeat_every_s': (exit_fence or {}).get('repeat_every_s', settings.get('default_repeat_every_s', 180)),
+        'once_per_team': bool((primary_fence or {}).get('once_per_team', False)),
+    }
+
+
+def _coerce_int_form_value(value, default=None):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_float_form_value(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_location_geofence_definitions(location, form_state):
+    fences = []
+
+    center_lat = form_state['center_lat']
+    center_lon = form_state['center_lon']
+    radius_m = form_state['radius_m']
+    once_per_team = form_state['once_per_team']
+
+    if form_state['enter_message']:
+        fences.append({
+            'id': f'location-{location.id}-enter',
+            'enabled': True,
+            'shape': 'circle',
+            'center': {'lat': center_lat, 'lon': center_lon},
+            'radius_m': radius_m,
+            'trigger': 'enter',
+            'message': form_state['enter_message'],
+            'cooldown_s': form_state['enter_repeat_every_s'],
+            'repeat_while': 'inside',
+            'repeat_every_s': form_state['enter_repeat_every_s'],
+            'once_per_team': once_per_team,
+            'priority': 100,
+            'metadata': {'editor': 'location_geofence'},
+        })
+
+    if form_state['exit_message']:
+        fences.append({
+            'id': f'location-{location.id}-exit',
+            'enabled': True,
+            'shape': 'circle',
+            'center': {'lat': center_lat, 'lon': center_lon},
+            'radius_m': radius_m,
+            'trigger': 'exit',
+            'message': form_state['exit_message'],
+            'cooldown_s': form_state['exit_repeat_every_s'],
+            'repeat_while': 'outside',
+            'repeat_every_s': form_state['exit_repeat_every_s'],
+            'once_per_team': once_per_team,
+            'priority': 100,
+            'metadata': {'editor': 'location_geofence'},
+        })
+
+    return fences
+
+
+def _render_location_geofence_editor(game, location, form_state=None):
+    return render_template(
+        'game/location_geofence_form.html',
+        game=game,
+        location=location,
+        form_state=form_state or _build_location_geofence_form_state(game, location),
+    )
+
+
+def _save_location_geofence_from_form(game, location):
+    form_state = {
+        'enabled': request.form.get('enabled') == '1',
+        'center_lat': request.form.get('center_lat'),
+        'center_lon': request.form.get('center_lon'),
+        'radius_m': _coerce_int_form_value(request.form.get('radius_m'), 75),
+        'enter_message': (request.form.get('enter_message') or '').strip(),
+        'enter_repeat_every_s': _coerce_int_form_value(request.form.get('enter_repeat_every_s'), game.get_geofence_settings().get('default_repeat_every_s', 180)),
+        'exit_message': (request.form.get('exit_message') or '').strip(),
+        'exit_repeat_every_s': _coerce_int_form_value(request.form.get('exit_repeat_every_s'), game.get_geofence_settings().get('default_repeat_every_s', 180)),
+        'once_per_team': request.form.get('once_per_team') == '1',
+    }
+
+    errors = []
+    center_lat = _coerce_float_form_value(form_state['center_lat'])
+    center_lon = _coerce_float_form_value(form_state['center_lon'])
+    if center_lat is None or center_lon is None:
+        errors.append('Center latitude and longitude are required.')
+
+    if form_state['radius_m'] is None or form_state['radius_m'] <= 0:
+        errors.append('Radius must be a positive number of meters.')
+
+    if form_state['enabled'] and not form_state['enter_message'] and not form_state['exit_message']:
+        errors.append('Provide at least an enter or exit message, or disable geofencing for this location.')
+
+    if form_state['enter_message'] and form_state['enter_repeat_every_s'] <= 0:
+        errors.append('Enter repeat interval must be a positive number of seconds.')
+
+    if form_state['exit_message'] and form_state['exit_repeat_every_s'] <= 0:
+        errors.append('Exit repeat interval must be a positive number of seconds.')
+
+    if errors:
+        form_state['center_lat'] = form_state['center_lat'] or ''
+        form_state['center_lon'] = form_state['center_lon'] or ''
+        for error in errors:
+            flash(error, 'danger')
+        return form_state, False
+
+    form_state['center_lat'] = center_lat
+    form_state['center_lon'] = center_lon
+
+    if form_state['enabled']:
+        fences = _build_location_geofence_definitions(location, form_state)
+    else:
+        fences = []
+
+    game.set_location_geofences(location.id, fences)
+    db.session.add(game)
+    db.session.commit()
+
+    flash(f"Geofence settings updated for '{location.name}'.", 'success')
+    return _build_location_geofence_form_state(game, location), True
+
+
 def _save_game_from_form(game=None):
     form_state = {
         'name': (request.form.get('name') or '').strip(),
@@ -557,6 +701,8 @@ def findloc():
         return redirect(url_for('main.account'))
     
     game = team.game  # Get the game from the team relationship
+    geofence_config = game.get_geofence_config()
+    geofence_settings = geofence_config.get('settings', {})
 
     actions=['check_clues']
     # If user has "mapper" role and cookie is set, append "mapper" to actions
@@ -647,6 +793,10 @@ def findloc():
                            enable_selfie=True,
                            enable_image_verify=False,
                            enable_qr_scanner=game.qr_enabled,
+                           geofence_settings=geofence_settings,
+                           geofences=geofence_config.get('locations', {}),
+                           team_geofence_state=team.get_geofence_state(),
+                           team_geofence_runtime=team.get_geofence_runtime_state(),
                            #games=games,
                            #teams_by_game=teams_by_game
                            )
@@ -1310,6 +1460,21 @@ def game_admin_edit(game_id):
 def game_admin_locations(game_id):
     game = Game.query.get_or_404(game_id)
     return _render_game_locations_page(game=game)
+
+
+@main_bp.route('/game_admin/<int:game_id>/locations/<int:location_id>/geofence', methods=['GET', 'POST'])
+@admin_page_required
+def game_admin_location_geofence(game_id, location_id):
+    game = Game.query.get_or_404(game_id)
+    location = Location.query.filter_by(id=location_id, game_id=game.id).first_or_404()
+
+    if request.method == 'POST':
+        form_state, saved = _save_location_geofence_from_form(game, location)
+        if saved:
+            return redirect(url_for('main.game_admin_location_geofence', game_id=game.id, location_id=location.id))
+        return _render_location_geofence_editor(game, location, form_state=form_state)
+
+    return _render_location_geofence_editor(game, location)
 
 
 @main_bp.route('/game_admin/<int:game_id>/routes')

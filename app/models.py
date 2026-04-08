@@ -8,6 +8,21 @@ from flask_login import UserMixin
 from datetime import datetime
 import secrets
 
+
+def _coerce_positive_int(value, default):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _coerce_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
 team_game = db.Table('team_game',
     db.Column('team_id', db.Integer, db.ForeignKey('team.id'), primary_key=True),
     db.Column('game_id', db.Integer, db.ForeignKey('game.id'), primary_key=True)
@@ -178,6 +193,131 @@ class Game(db.Model):
                     return None
         return None
 
+    def get_geofence_settings(self):
+        defaults = {
+            'enabled': False,
+            'poll_interval_s': 20,
+            'default_cooldown_s': 300,
+            'default_repeat_every_s': 180,
+        }
+        if not self.data or not isinstance(self.data, dict):
+            return defaults
+
+        settings = dict(self.data.get('geofence_settings', {}) or {})
+        raw_geofences = self.data.get('geofences', {}) or {}
+
+        enabled = settings.get('enabled')
+        if enabled is None:
+            enabled = bool(raw_geofences)
+
+        return {
+            'enabled': bool(enabled),
+            'poll_interval_s': _coerce_positive_int(settings.get('poll_interval_s'), defaults['poll_interval_s']),
+            'default_cooldown_s': _coerce_positive_int(settings.get('default_cooldown_s'), defaults['default_cooldown_s']),
+            'default_repeat_every_s': _coerce_positive_int(settings.get('default_repeat_every_s'), defaults['default_repeat_every_s']),
+        }
+
+    def get_geofence_config(self):
+        settings = self.get_geofence_settings()
+        if not self.data or not isinstance(self.data, dict):
+            return {'settings': settings, 'locations': {}}
+
+        raw_locations = self.data.get('geofences', {}) or {}
+        normalized_locations = {}
+
+        for location_id, fences in raw_locations.items():
+            try:
+                location_key = str(int(location_id))
+            except (TypeError, ValueError):
+                continue
+
+            if not isinstance(fences, list):
+                continue
+
+            normalized_fences = []
+            for index, fence in enumerate(fences):
+                if not isinstance(fence, dict):
+                    continue
+
+                shape = (fence.get('shape') or '').strip().lower()
+                trigger = (fence.get('trigger') or '').strip().lower()
+                repeat_while = fence.get('repeat_while')
+                repeat_while = (repeat_while or '').strip().lower() if repeat_while else None
+
+                center = dict(fence.get('center', {}) or {})
+                center_lat = _coerce_float(center.get('lat'))
+                center_lon = _coerce_float(center.get('lon'))
+                radius_m = _coerce_float(fence.get('radius_m'))
+
+                if shape != 'circle':
+                    continue
+                if trigger not in {'enter', 'exit'}:
+                    continue
+                if center_lat is None or center_lon is None or radius_m is None or radius_m <= 0:
+                    continue
+
+                message = (fence.get('message') or '').strip()
+                if not message:
+                    continue
+
+                if repeat_while not in {'inside', 'outside'}:
+                    repeat_while = None
+
+                normalized_fences.append({
+                    'id': str(fence.get('id') or f'location-{location_key}-fence-{index + 1}'),
+                    'enabled': bool(fence.get('enabled', True)),
+                    'shape': shape,
+                    'center': {'lat': center_lat, 'lon': center_lon},
+                    'radius_m': radius_m,
+                    'trigger': trigger,
+                    'message': message,
+                    'cooldown_s': _coerce_positive_int(fence.get('cooldown_s'), settings['default_cooldown_s']),
+                    'once_per_team': bool(fence.get('once_per_team', False)),
+                    'priority': int(fence.get('priority', 0) or 0),
+                    'repeat_while': repeat_while,
+                    'repeat_every_s': (
+                        _coerce_positive_int(fence.get('repeat_every_s'), settings['default_repeat_every_s'])
+                        if repeat_while else None
+                    ),
+                    'metadata': dict(fence.get('metadata', {}) or {}),
+                    'location_id': int(location_key),
+                })
+
+            if normalized_fences:
+                normalized_locations[location_key] = normalized_fences
+
+        return {'settings': settings, 'locations': normalized_locations}
+
+    def get_location_geofences(self, location_id):
+        return list(self.get_geofence_config().get('locations', {}).get(str(location_id), []))
+
+    def set_location_geofences(self, location_id, fences):
+        data = dict(self.data or {})
+        raw_locations = dict(data.get('geofences', {}) or {})
+        key = str(location_id)
+
+        cleaned_fences = []
+        for fence in fences or []:
+            if not isinstance(fence, dict):
+                continue
+            cleaned_fences.append(dict(fence))
+
+        if cleaned_fences:
+            raw_locations[key] = cleaned_fences
+        else:
+            raw_locations.pop(key, None)
+
+        data['geofences'] = raw_locations
+        settings = dict(data.get('geofence_settings', {}) or {})
+        settings['enabled'] = bool(raw_locations)
+        data['geofence_settings'] = settings
+        self.data = data
+        return cleaned_fences
+
+    def has_geofences(self):
+        config = self.get_geofence_config()
+        return bool(config.get('settings', {}).get('enabled')) and any(config.get('locations', {}).values())
+
 class GameType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
@@ -233,6 +373,25 @@ class Team(db.Model):
 
     def __str__(self):
         return self.name
+
+    def get_geofence_state(self):
+        if not self.data or not isinstance(self.data, dict):
+            return {}
+        return dict(self.data.get('geofence_state', {}) or {})
+
+    def get_geofence_runtime_state(self):
+        if not self.data or not isinstance(self.data, dict):
+            return {}
+        return dict(self.data.get('geofence_runtime', {}) or {})
+
+    def set_geofence_tracking(self, geofence_state=None, geofence_runtime=None):
+        data = dict(self.data or {})
+        if geofence_state is not None:
+            data['geofence_state'] = dict(geofence_state or {})
+        if geofence_runtime is not None:
+            data['geofence_runtime'] = dict(geofence_runtime or {})
+        self.data = data
+        return self.data
     
 class User(db.Model,UserMixin):
     id = db.Column(db.Integer, primary_key=True)

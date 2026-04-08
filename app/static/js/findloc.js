@@ -147,6 +147,9 @@ export function renderCluesFromState() {
     const isCurrent = idx === gs.currentIndex;
     const syncedAt = Number(loc.syncedAt || 0);
     const isRecentlySynced = !isPending && isFound && syncedAt > 0 && (now - syncedAt) < SYNC_BADGE_FLASH_MS;
+    const geofenceStatus = loc.geofenceStatus || null;
+    const geofenceSummary = geofenceStatus?.summary || '';
+    const geofenceSummaryClass = geofenceStatus?.inside_any ? 'text-success' : 'text-warning';
 
     if (isRecentlySynced) {
       const expiry = syncedAt + SYNC_BADGE_FLASH_MS;
@@ -191,6 +194,7 @@ export function renderCluesFromState() {
               </div>
             ` : ''}
             <p class="card-text">${loc.clue_text}</p>
+              ${geofenceSummary ? `<div class="small fw-semibold ${geofenceSummaryClass} mb-2">${geofenceSummary}</div>` : ''}
                  ${loc.lat != null && loc.lon != null ? `
               <div id="map-${loc.id}" class="map-container"
                    data-lat="${loc.lat}" data-lon="${loc.lon}" style="height: 200px;"></div>
@@ -266,6 +270,10 @@ export function renderCluesFromState() {
       setupValidationButtons();
     }, delay);
   }
+
+  document.dispatchEvent(new CustomEvent('geokr:game-state-updated', {
+    detail: { currentIndex: gs.currentIndex }
+  }));
 }
 
 // Clear offline queue
